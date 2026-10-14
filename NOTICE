@@ -1,0 +1,26 @@
+command-code-cpa-bridge
+Copyright (c) 2026 command-code-cpa-bridge contributors
+
+This product includes software developed as part of:
+
+1. commandcode-go-cliproxyapi
+   https://github.com/mczhoucn/commandcode-go-cliproxyapi
+   Copyright (c) 2026 mczhoucn
+   Licensed under the MIT License.
+
+   The provider engine — configuration, catalog discovery, protocol adapters
+   (chat-completions / messages / responses), reasoning preservation, error
+   classification, thinking support, host-callback bridge, auth parsing,
+   executor, account-email sync, and the original quota page concept — is
+   derived from this project.
+
+2. ClinePassBridge
+   https://github.com/xiao-qiu-qiu/ClinePassBridge
+   Copyright (c) 2026 xiao-qiu-qiu
+   Licensed under the MIT License.
+
+   The management-console page shape (embedded single-page console registered
+   through the plugin Management API, browser-side management-key reuse) is
+   modeled on this project.
+
+Both licenses are reproduced in the LICENSE file.

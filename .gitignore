@@ -1,0 +1,9 @@
+dist/
+plugins/
+*.so
+*.dylib
+*.dll
+*.h
+*.zip
+checksums.txt
+command-code-cpa-bridge-data/

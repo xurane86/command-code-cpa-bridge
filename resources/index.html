@@ -1,0 +1,989 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="white">
+<head>
+<meta charset="utf-8">
+<script>
+  // Resolve the host theme before styles or content paint (mirrors the
+  // ClinePassBridge console): follow the embedding CPA / CPAMP frame, otherwise
+  // fall back to the panel's saved theme, defaulting to pure white standalone.
+  (() => {
+    function applyTheme(value) {
+      document.documentElement.dataset.theme = value === 'dark' || value === 'light' ? value : 'white';
+    }
+    function syncTheme() {
+      try {
+        if (window.parent !== window) {
+          document.documentElement.classList.add('embedded');
+          applyTheme(window.parent.document.documentElement.getAttribute('data-theme') || 'light');
+          return true;
+        }
+      } catch (_) { if (window.parent !== window) document.documentElement.classList.add('embedded'); }
+      try {
+        const saved = JSON.parse(localStorage.getItem('cli-proxy-theme') || '{}').state?.theme;
+        applyTheme(saved === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'white') : saved);
+      } catch (_) { applyTheme(null); }
+      return false;
+    }
+    if (syncTheme()) new MutationObserver(syncTheme).observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+    window.addEventListener('storage', (event) => { if (event.key === 'cli-proxy-theme') syncTheme(); });
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="cpa-api-base" content="__API_BASE__">
+<title>CommandCode 控制台</title>
+<style>
+:root,
+:root[data-theme="white"] {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --panel-2: #f1f3f6;
+  --text: #1f2430;
+  --text-2: #5b6472;
+  --text-3: #8b94a3;
+  --border: #e2e6ec;
+  --primary: #2f6fed;
+  --primary-weak: #e8f0fe;
+  --danger: #d64545;
+  --danger-weak: #fdeceb;
+  --ok: #1f8a53;
+  --ok-weak: #e7f6ee;
+  --warn: #b7791f;
+  --warn-weak: #fdf3e3;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(20, 30, 50, .06), 0 6px 16px rgba(20, 30, 50, .06);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1319;
+  --panel: #171c24;
+  --panel-2: #1e242e;
+  --text: #e6eaf0;
+  --text-2: #a4adbb;
+  --text-3: #6f7987;
+  --border: #2a323d;
+  --primary: #5a8bf5;
+  --primary-weak: #1d2a44;
+  --danger: #ec6a6a;
+  --danger-weak: #331d1d;
+  --ok: #4cc38a;
+  --ok-weak: #16301f;
+  --warn: #d9a441;
+  --warn-weak: #33280f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 16px rgba(0, 0, 0, .35);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #0f1319;
+    --panel: #171c24;
+    --panel-2: #1e242e;
+    --text: #e6eaf0;
+    --text-2: #a4adbb;
+    --text-3: #6f7987;
+    --border: #2a323d;
+    --primary: #5a8bf5;
+    --primary-weak: #1d2a44;
+    --danger: #ec6a6a;
+    --danger-weak: #331d1d;
+    --ok: #4cc38a;
+    --ok-weak: #16301f;
+    --warn: #d9a441;
+    --warn-weak: #33280f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 16px rgba(0, 0, 0, .35);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+a { color: var(--primary); }
+.hidden { display: none !important; }
+header.top {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+header.top h1 { font-size: 16px; margin: 0; font-weight: 650; }
+header.top .spacer { flex: 1; }
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 9px; border-radius: 999px; font-size: 12px;
+  background: var(--panel-2); color: var(--text-2); border: 1px solid var(--border);
+}
+.badge.ok { background: var(--ok-weak); color: var(--ok); border-color: transparent; }
+.badge.err { background: var(--danger-weak); color: var(--danger); border-color: transparent; }
+nav.tabs {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  padding: 8px 16px; background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 57px; z-index: 19;
+}
+nav.tabs button {
+  appearance: none; border: 1px solid transparent; background: transparent;
+  color: var(--text-2); padding: 7px 13px; border-radius: 8px; cursor: pointer;
+  font-size: 14px; font-weight: 500;
+}
+nav.tabs button:hover { background: var(--panel-2); color: var(--text); }
+nav.tabs button.active { background: var(--primary-weak); color: var(--primary); }
+main { padding: 20px; max-width: 1240px; margin: 0 auto; }
+section { animation: fade .18s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; } }
+h2 { font-size: 15px; margin: 0 0 12px; font-weight: 650; }
+h3 { font-size: 13px; margin: 0 0 8px; color: var(--text-2); font-weight: 600; }
+.card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow);
+}
+.grid { display: grid; gap: 14px; }
+.grid.cols { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.row.between { justify-content: space-between; }
+.row.end { justify-content: flex-end; }
+.muted { color: var(--text-2); }
+.tiny { font-size: 12px; color: var(--text-3); }
+.mono { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.stat { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.stat .k { font-size: 12px; color: var(--text-3); }
+.stat .v { font-size: 20px; font-weight: 650; margin-top: 3px; word-break: break-all; }
+button.btn {
+  appearance: none; border: 1px solid var(--border); background: var(--panel);
+  color: var(--text); padding: 7px 13px; border-radius: 8px; cursor: pointer; font-size: 13.5px;
+  transition: background .12s, border-color .12s;
+}
+button.btn:hover { background: var(--panel-2); }
+button.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+button.btn.primary:hover { filter: brightness(1.06); }
+button.btn.danger { color: var(--danger); border-color: var(--border); }
+button.btn.danger:hover { background: var(--danger-weak); }
+button.btn.small { padding: 4px 9px; font-size: 12.5px; }
+button.btn:disabled { opacity: .55; cursor: not-allowed; }
+input, select, textarea {
+  background: var(--panel); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; font: inherit; min-width: 0;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary-weak); border-color: var(--primary); }
+label.field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--text-2); }
+label.field > span { font-weight: 500; }
+label.check { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--text); }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--text-3); font-weight: 600; font-size: 12px; white-space: nowrap; }
+tbody tr:hover { background: var(--panel-2); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; background: var(--panel-2); color: var(--text-2); }
+.pill.ok { background: var(--ok-weak); color: var(--ok); }
+.pill.err { background: var(--danger-weak); color: var(--danger); }
+.pill.warn { background: var(--warn-weak); color: var(--warn); }
+.bar { height: 8px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
+.bar.exceeded > i { background: var(--danger); }
+.cred-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.cred-card .head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.win { margin-top: 10px; }
+.win .row { justify-content: space-between; font-size: 12.5px; color: var(--text-2); }
+.collapse { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.collapse > summary { cursor: pointer; padding: 12px 16px; font-weight: 600; font-size: 13.5px; }
+.collapse > .body { padding: 0 16px 16px; }
+.overlay {
+  position: fixed; inset: 0; z-index: 50; background: rgba(10, 14, 20, .45);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.overlay .box { background: var(--panel); border-radius: 14px; padding: 22px; width: 100%; max-width: 420px; box-shadow: var(--shadow); }
+#toast { position: fixed; right: 18px; bottom: 18px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
+.toast { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 8px; padding: 10px 14px; box-shadow: var(--shadow); max-width: 360px; font-size: 13px; }
+.toast.err { border-left-color: var(--danger); }
+.toast.ok { border-left-color: var(--ok); }
+.empty { text-align: center; color: var(--text-3); padding: 34px 10px; }
+.pager { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 10px; }
+pre.err { background: var(--danger-weak); color: var(--danger); padding: 10px 12px; border-radius: 8px; overflow: auto; font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+<div id="login" class="overlay hidden">
+  <div class="box">
+    <h2>授权与密钥</h2>
+    <p class="muted" style="margin-top:0">先复用同源 CPA / CPAMP 记住的登录；手动密钥验证成功后只保存在本标签页会话，勾选「在此浏览器记住管理密钥」后下次自动使用。</p>
+    <label class="field"><span>管理密钥</span><input id="loginKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="当前站点的 CPA 或 CPAMP 管理密钥"></label>
+    <label class="check" style="margin-top:10px"><input id="loginType" type="checkbox"> 使用 X-Management-Key 头</label>
+    <label class="check" style="margin-top:6px"><input id="loginRemember" type="checkbox"> 在此浏览器记住管理密钥</label>
+    <div class="row end" style="margin-top:16px">
+      <button class="btn" id="loginClear">清除密钥</button>
+      <button class="btn primary" id="loginBtn">保存并验证</button>
+    </div>
+    <div id="loginErr" class="tiny" style="color:var(--danger);margin-top:8px"></div>
+  </div>
+</div>
+
+<header class="top">
+  <h1>CommandCode 控制台</h1>
+  <span class="badge" id="statusBadge">加载中…</span>
+  <div class="spacer"></div>
+  <span class="tiny" id="versionLabel">v__VERSION__</span>
+  <button class="btn small" id="reloadBtn">刷新</button>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<main>
+  <section id="tab-overview" class="stack"></section>
+  <section id="tab-credentials" class="stack hidden"></section>
+  <section id="tab-models" class="stack hidden"></section>
+  <section id="tab-quota" class="stack hidden"></section>
+  <section id="tab-logs" class="stack hidden"></section>
+  <section id="tab-stats" class="stack hidden"></section>
+  <section id="tab-settings" class="stack hidden"></section>
+</main>
+
+<div id="toast"></div>
+
+<script>/*__AUTH_MODULE__*/</script>
+<script>
+"use strict";
+(() => {
+  const apiMeta = document.querySelector('meta[name="cpa-api-base"]');
+  // The injected auth module already rewrote the meta base with this console's
+  // own reverse-proxy prefix and /v0-vs-/v8 version; read it afterwards.
+  const API = apiMeta.content;
+  const AUTH = window.CCBridgeAuth || { headers: () => ({}), save: () => {}, clear: () => {}, remember: () => false };
+
+  // ---- fetch wrapper ----
+  async function api(path, options = {}) {
+    const headers = Object.assign({ "Accept": "application/json" }, AUTH.headers(), options.headers || {});
+    if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+    const resp = await fetch(API + path, Object.assign({}, options, { headers }));
+    if (resp.status === 401 || resp.status === 403) {
+      AUTH.clear(headers);
+      pauseAuth("管理密钥无效或已过期，请重新输入。");
+      throw new Error("unauthorized");
+    }
+    const text = await resp.text();
+    let data = null;
+    if (text) { try { data = JSON.parse(text); } catch (_) { data = { raw: text }; } }
+    if (!resp.ok) throw new Error((data && (data.error || data.message)) || ("HTTP " + resp.status));
+    return data;
+  }
+
+  // ---- 授权与密钥 (mirrors the ClinePassBridge auth panel) ----
+  let authPaused = "";
+  function authState() {
+    if (authPaused) return authPaused;
+    return Object.keys(AUTH.headers()).length ? "已复用本机记住的管理登录。" : "尚未提供管理密钥。";
+  }
+  function openAuthDialog(message) {
+    document.getElementById("loginErr").textContent = message || authPaused || "";
+    document.getElementById("loginRemember").checked = AUTH.remember();
+    document.getElementById("login").classList.remove("hidden");
+    document.getElementById("loginKey").focus();
+  }
+  function closeAuthDialog() {
+    document.getElementById("login").classList.add("hidden");
+    document.getElementById("loginErr").textContent = "";
+  }
+  function pauseAuth(message) {
+    authPaused = message || "";
+    openAuthDialog(authPaused);
+  }
+  document.getElementById("loginBtn").addEventListener("click", () => {
+    const key = document.getElementById("loginKey").value.trim();
+    if (!key) { document.getElementById("loginErr").textContent = "请输入管理密钥"; return; }
+    AUTH.save(key, document.getElementById("loginType").checked ? "x-management-key" : "bearer", document.getElementById("loginRemember").checked);
+    document.getElementById("loginKey").value = "";
+    authPaused = "";
+    closeAuthDialog();
+    loadAll();
+  });
+  document.getElementById("loginClear").addEventListener("click", () => {
+    AUTH.clear();
+    document.getElementById("loginKey").value = "";
+    document.getElementById("loginErr").textContent = "已清除本地的管理密钥。";
+  });
+
+  // ---- helpers ----
+  function el(tag, props, children) {
+    const node = document.createElement(tag);
+    if (props) for (const k in props) {
+      if (k === "class") node.className = props[k];
+      else if (k === "text") node.textContent = props[k];
+      else if (k === "html") node.innerHTML = props[k];
+      else if (k.startsWith("on") && typeof props[k] === "function") node.addEventListener(k.slice(2), props[k]);
+      else if (props[k] === false || props[k] === null || props[k] === undefined) { /* skip falsey attributes */ }
+      else if (props[k] === true) node.setAttribute(k, "");
+      else node.setAttribute(k, props[k]);
+    }
+    (children || []).forEach(c => node.appendChild(typeof c === "string" ? document.createTextNode(c) : c));
+    return node;
+  }
+  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+  function toast(message, kind) {
+    const box = el("div", { class: "toast " + (kind || ""), text: message });
+    document.getElementById("toast").appendChild(box);
+    setTimeout(() => box.remove(), 4200);
+  }
+  function fmtTime(v) {
+    if (!v) return "—";
+    const d = new Date(v);
+    return isNaN(d) ? String(v) : d.toLocaleString();
+  }
+  function fmtDur(ms) {
+    if (!ms) return "—";
+    if (ms < 1000) return ms + " ms";
+    return (ms / 1000).toFixed(2) + " s";
+  }
+  function pct(n) { return Math.max(0, Math.min(100, n || 0)); }
+  async function guard(fn) {
+    try { await fn(); }
+    catch (e) { if (e.message !== "unauthorized") toast(e.message || String(e), "err"); }
+  }
+
+  // ---- top status ----
+  async function loadStatus() {
+    const badge = document.getElementById("statusBadge");
+    try {
+      const s = await api("/status");
+      const ok = !s.last_refresh_error;
+      badge.className = "badge " + (ok ? "ok" : "err");
+      badge.textContent = ok
+        ? `正常 · ${s.model_count} 个模型`
+        : "目录刷新异常";
+      return s;
+    } catch (e) {
+      badge.className = "badge err";
+      badge.textContent = "不可用";
+      throw e;
+    }
+  }
+
+  // ---- tabs ----
+  const TABS = [
+    ["overview", "概览"], ["credentials", "凭据"], ["models", "模型"],
+    ["quota", "额度"], ["logs", "日志"], ["stats", "统计"], ["settings", "设置"],
+  ];
+  let activeTab = "overview";
+  function buildTabs() {
+    const nav = document.getElementById("tabs");
+    clear(nav);
+    TABS.forEach(([id, label]) => {
+      nav.appendChild(el("button", {
+        class: activeTab === id ? "active" : "",
+        onClick: () => switchTab(id),
+      }, [label]));
+    });
+  }
+  function switchTab(id) {
+    activeTab = id;
+    buildTabs();
+    TABS.forEach(([t]) => document.getElementById("tab-" + t).classList.toggle("hidden", t !== id));
+    RENDER[id] && RENDER[id]();
+  }
+
+  // ---- overview ----
+  function statCard(k, v) {
+    return el("div", { class: "stat" }, [
+      el("div", { class: "k", text: k }),
+      el("div", { class: "v", text: v === undefined || v === null || v === "" ? "—" : String(v) }),
+    ]);
+  }
+  async function renderOverview() {
+    const root = document.getElementById("tab-overview");
+    clear(root);
+    await guard(async () => {
+      const s = await api("/status");
+      const grid = el("div", { class: "grid cols" }, [
+        statCard("插件版本", s.version),
+        statCard("提供商标识", s.provider),
+        statCard("已发布模型", s.model_count),
+        statCard("YAML 静态密钥", s.yaml_key_count),
+        statCard("模型前缀", s.prefix_enabled ? s.prefix_value + "/" : "未启用"),
+        statCard("最近目录刷新", fmtTime(s.last_refresh_at)),
+        statCard("存储目录", s.data_dir || "未配置（重启不保留设置/日志）"),
+        statCard("发布白名单/屏蔽", (s.publication_enabled || 0) + " / " + (s.publication_hidden || 0)),
+      ]);
+      root.appendChild(grid);
+      if (s.last_refresh_error) {
+        root.appendChild(el("div", { class: "card" }, [
+          el("h3", { text: "最近刷新错误" }),
+          el("pre", { class: "err", text: s.last_refresh_error }),
+        ]));
+      }
+      root.appendChild(el("div", { class: "card" }, [
+        el("h3", { text: "快速操作" }),
+        el("div", { class: "row" }, [
+          el("button", { class: "btn primary", onClick: () => guard(async () => {
+            await api("/models/refresh", { method: "POST" });
+            toast("目录已刷新", "ok");
+            renderOverview(); loadStatus();
+          })}, ["刷新模型目录"]),
+          el("button", { class: "btn", onClick: () => switchTab("credentials") }, ["管理凭据"]),
+          el("button", { class: "btn", onClick: () => switchTab("quota") }, ["查看额度"]),
+        ]),
+      ]));
+      root.appendChild(el("div", { class: "card" }, [
+        el("h3", { text: "调用方式" }),
+        el("p", { class: "muted", text: "客户端使用 CPA 的 API 地址与 API Key，model 填已发布的模型 ID（例如 commandcode/deepseek/deepseek-v4.1-flash）。模式与协议由本插件自动转换。" }),
+      ]));
+    });
+  }
+
+  // ---- credentials ----
+  async function renderCredentials() {
+    const root = document.getElementById("tab-credentials");
+    clear(root);
+    await guard(async () => {
+      const data = await api("/credentials");
+      root.appendChild(credForm());
+      const items = data.items || [];
+      if (!items.length) {
+        root.appendChild(el("div", { class: "card empty", text: "还没有 CommandCode 凭据。在上方添加一个 API Key 即可。" }));
+        return;
+      }
+      const wrap = el("div", { class: "table-wrap" });
+      const table = el("table");
+      table.appendChild(el("thead", null, [el("tr", null, [
+        el("th", { text: "标签" }), el("th", { text: "账号" }), el("th", { text: "密钥" }),
+        el("th", { text: "状态" }), el("th", { text: "优先级" }), el("th", { text: "操作" }),
+      ])]));
+      const tbody = el("tbody");
+      items.forEach(c => {
+        const enabled = c.enabled !== false;
+        tbody.appendChild(el("tr", null, [
+          el("td", null, [el("div", { text: c.label || c.id }), el("div", { class: "tiny mono", text: c.id })]),
+          el("td", { text: c.email || "—" }),
+          el("td", { class: "mono", text: c.key_masked || (c.has_key ? "已设置" : "未知") }),
+          el("td", null, [el("span", { class: "pill " + (enabled ? "ok" : "warn"), text: enabled ? "已启用" : "已停用" }),
+                          c.status ? el("span", { class: "tiny", text: " " + c.status }) : null]),
+          el("td", { text: c.priority || 0 }),
+          el("td", null, [el("div", { class: "row" }, [
+            el("button", { class: "btn small", onClick: () => guard(async () => {
+              await api("/credentials", { method: "PUT", body: JSON.stringify({ id: c.id, disabled: enabled }) });
+              toast(enabled ? "已停用" : "已启用", "ok"); renderCredentials();
+            })}, [enabled ? "停用" : "启用"]),
+            el("button", { class: "btn small", onClick: () => editCredential(c) }, ["编辑"]),
+            el("button", { class: "btn small danger", onClick: () => guard(async () => {
+              if (!confirm("确定删除该凭据？（会删除对应的 auth 文件）")) return;
+              await api("/credentials?id=" + encodeURIComponent(c.id), { method: "DELETE" });
+              toast("已删除", "ok"); renderCredentials();
+            })}, ["删除"]),
+          ])]),
+        ]));
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      root.appendChild(wrap);
+    });
+  }
+  function credForm() {
+    const label = el("input", { placeholder: "备注，如 主账号" });
+    const key = el("input", { placeholder: "CommandCode API Key", type: "password", autocomplete: "off" });
+    const card = el("div", { class: "card" }, [
+      el("h3", { text: "添加凭据" }),
+      el("p", { class: "tiny", text: "CommandCode 使用 API Key 接入，无交互式 OAuth：填入 Key 即可。账号邮箱会在查询额度时自动同步。" }),
+      el("div", { class: "row", style: "align-items:flex-end" }, [
+        el("label", { class: "field", style: "flex:1;min-width:180px" }, [el("span", { text: "标签" }), label]),
+        el("label", { class: "field", style: "flex:2;min-width:240px" }, [el("span", { text: "API Key" }), key]),
+        el("button", { class: "btn primary", onClick: () => guard(async () => {
+          if (!key.value.trim()) { toast("请填写 API Key", "err"); return; }
+          await api("/credentials", { method: "POST", body: JSON.stringify({ label: label.value.trim(), api_key: key.value.trim() }) });
+          toast("凭据已添加", "ok"); renderCredentials(); loadStatus();
+        })}, ["添加"]),
+      ]),
+    ]);
+    return card;
+  }
+  function editCredential(c) {
+    const label = el("input", { value: c.label || "" });
+    const key = el("input", { placeholder: "留空则不修改", type: "password", autocomplete: "off" });
+    const priority = el("input", { type: "number", value: c.priority || 0 });
+    const overlay = el("div", { class: "overlay" }, [
+      el("div", { class: "box" }, [
+        el("h2", { text: "编辑凭据" }),
+        el("div", { class: "stack" }, [
+          el("label", { class: "field" }, [el("span", { text: "标签" }), label]),
+          el("label", { class: "field" }, [el("span", { text: "API Key（留空不变）" }), key]),
+          el("label", { class: "field" }, [el("span", { text: "优先级（越大越优先）" }), priority]),
+        ]),
+        el("div", { class: "row end", style: "margin-top:16px" }, [
+          el("button", { class: "btn", onClick: () => overlay.remove() }, ["取消"]),
+          el("button", { class: "btn primary", onClick: () => guard(async () => {
+            const body = { id: c.id, label: label.value, priority: Number(priority.value) || 0 };
+            if (key.value.trim()) body.api_key = key.value.trim();
+            await api("/credentials", { method: "PUT", body: JSON.stringify(body) });
+            overlay.remove(); toast("已保存", "ok"); renderCredentials();
+          })}, ["保存"]),
+        ]),
+      ]),
+    ]);
+    document.body.appendChild(overlay);
+  }
+
+  // ---- models ----
+  async function renderModels() {
+    const root = document.getElementById("tab-models");
+    clear(root);
+    await guard(async () => {
+      const data = await api("/models");
+      const head = el("div", { class: "card" }, [
+        el("div", { class: "row between" }, [
+          el("div", null, [
+            el("h3", { text: "模型目录" }),
+            el("div", { class: "tiny", text: `客户端前缀：${data.prefix_enabled ? "已启用" : "未启用"} · 共 ${(data.models || []).length} 个模型` }),
+          ]),
+          el("div", { class: "row" }, [
+            el("button", { class: "btn", onClick: () => guard(async () => {
+              await api("/models/refresh", { method: "POST" }); toast("已刷新", "ok"); renderModels();
+            })}, ["刷新目录"]),
+            el("button", { class: "btn primary", onClick: () => savePublication(data.models || []) }, ["保存发布设置"]),
+          ]),
+        ]),
+      ]);
+      root.appendChild(head);
+
+      if ((data.warnings || []).length) {
+        root.appendChild(el("details", { class: "collapse" }, [
+          el("summary", { text: `目录诊断（${data.warnings.length} 条警告 / ${(data.unsupported || []).length} 个被排除）` }),
+          el("div", { class: "body" }, (data.warnings || []).map(w => el("div", { class: "tiny mono", text: w }))
+            .concat((data.unsupported || []).map(u => el("div", { class: "tiny mono", text: `× ${u.upstream_id}: ${u.reason}` })))),
+        ]));
+      }
+
+      const models = data.models || [];
+      if (!models.length) {
+        root.appendChild(el("div", { class: "card empty", text: "目录为空。请先添加凭据，然后点击“刷新目录”。" }));
+        return;
+      }
+      const wrap = el("div", { class: "table-wrap" });
+      const table = el("table");
+      table.appendChild(el("thead", null, [el("tr", null, [
+        el("th", { text: "发布" }), el("th", { text: "客户端模型 ID" }), el("th", { text: "上游 ID" }),
+        el("th", { text: "协议" }), el("th", { text: "上下文" }), el("th", { text: "思考" }), el("th", { text: "操作" }),
+      ])]));
+      const tbody = el("tbody");
+      models.forEach(m => {
+        const cb = el("input", { type: "checkbox" });
+        cb.checked = m.published !== false;
+        cb.dataset.upstream = m.upstream_id;
+        tbody.appendChild(el("tr", null, [
+          el("td", null, [cb]),
+          el("td", { class: "mono", text: m.public_id }),
+          el("td", { class: "mono", text: m.upstream_id }),
+          el("td", null, [el("span", { class: "pill", text: m.protocol })]),
+          el("td", { text: m.context_length ? String(m.context_length) : "—" }),
+          el("td", null, [el("span", { class: "pill " + (m.thinking ? "ok" : ""), text: m.thinking ? "支持" : "—" })]),
+          el("td", null, [el("button", { class: "btn small", onClick: () => openModelTest(m) }, ["测试"])]),
+        ]));
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      root.appendChild(wrap);
+    });
+  }
+  function savePublication(models) {
+    return guard(async () => {
+      const disabled = [];
+      document.querySelectorAll('#tab-models input[type=checkbox]').forEach(cb => {
+        if (!cb.checked) disabled.push(cb.dataset.upstream);
+      });
+      await api("/models/publication", { method: "PUT", body: JSON.stringify({ enabled_models: [], disabled_models: disabled }) });
+      toast("发布设置已保存", "ok"); renderModels();
+    });
+  }
+
+  function formatTestResult(r) {
+    const lines = [];
+    lines.push(`结果：${r.ok ? "成功" : "失败"}`);
+    if (r.status) lines.push(`HTTP：${r.status}`);
+    if (r.protocol) lines.push(`协议：${r.protocol}`);
+    if (r.credential_id) lines.push(`凭据：${r.credential_id}`);
+    if (r.latency_ms !== undefined && r.latency_ms !== null) lines.push(`总耗时：${fmtDur(r.latency_ms)}`);
+    if (r.first_byte_ms) lines.push(`首字：${fmtDur(r.first_byte_ms)}`);
+    if (r.usage) lines.push(`tokens：入 ${r.usage.input_tokens || 0} / 出 ${r.usage.output_tokens || 0} / 缓存 ${r.usage.cached_tokens || 0}`);
+    if (r.error) lines.push(`错误：${r.error}`);
+    if (r.reply) lines.push("--- 回复 ---\n" + r.reply);
+    return lines.join("\n");
+  }
+
+  function openModelTest(m) {
+    const credSel = el("select");
+    const prompt = el("input", { value: "你好，请用一句话回复。", style: "min-width:260px" });
+    const streamCb = el("input", { type: "checkbox" });
+    const result = el("pre", { class: "mono", style: "white-space:pre-wrap;max-height:260px;overflow:auto;margin-top:12px;background:var(--panel-2);padding:10px;border-radius:8px", text: "尚未测试。" });
+    const overlay = el("div", { class: "overlay" }, [
+      el("div", { class: "box", style: "max-width:600px" }, [
+        el("h2", { text: "测试模型" }),
+        el("div", { class: "tiny mono", style: "margin-bottom:10px", text: m.public_id + "  →  " + m.upstream_id }),
+        el("div", { class: "stack" }, [
+          el("label", { class: "field" }, [el("span", { text: "凭据（测试会消耗少量额度）" }), credSel]),
+          el("label", { class: "field" }, [el("span", { text: "提示词" }), prompt]),
+          el("label", { class: "check" }, [streamCb, el("span", { text: "流式测试（验证流式链路与首字耗时）" })]),
+        ]),
+        result,
+        el("div", { class: "row end", style: "margin-top:14px" }, [
+          el("button", { class: "btn", onClick: () => overlay.remove() }, ["关闭"]),
+          el("button", { class: "btn primary", onClick: () => guard(async () => {
+            result.textContent = "请求中…";
+            const body = { model: m.public_id, prompt: prompt.value, stream: streamCb.checked, credential_id: credSel.value };
+            const r = await api("/models/test", { method: "POST", body: JSON.stringify(body) });
+            result.textContent = formatTestResult(r);
+            if (!r.ok) toast(r.error || "测试失败", "err");
+          })}, ["开始测试"]),
+        ]),
+      ]),
+    ]);
+    document.body.appendChild(overlay);
+    credSel.appendChild(el("option", { value: "", text: "自动选择（第一把可用凭据）" }));
+    api("/credentials").then(d => {
+      (d.items || []).forEach(c => credSel.appendChild(el("option", {
+        value: c.id, text: (c.label || c.id) + (c.enabled === false ? "（已停用）" : ""),
+      })));
+    }).catch(() => {});
+  }
+
+  // ---- quota ----
+  function windowRow(title, win) {
+    const row = el("div", { class: "win" });
+    row.appendChild(el("div", { class: "row" }, [
+      el("span", { text: title }),
+      el("span", { class: "tiny", text: win ? `${win.used} / ${win.cap}${win.resets_at ? " · 重置 " + fmtTime(win.resets_at) : ""}` : "—" }),
+    ]));
+    if (win) {
+      row.appendChild(el("div", { class: "bar " + (win.status === "exceeded" ? "exceeded" : "") }, [
+        el("i", { style: "width:" + pct(win.percent) + "%" }),
+      ]));
+    }
+    return row;
+  }
+  async function renderQuota() {
+    const root = document.getElementById("tab-quota");
+    clear(root);
+    await guard(async () => {
+      const list = await api("/quota-usage", { method: "POST", body: "{}" });
+      const cards = list.cards || [];
+      if (!cards.length) {
+        root.appendChild(el("div", { class: "card empty", text: "还没有凭据，无法查询额度。" }));
+        return;
+      }
+      const grid = el("div", { class: "grid", style: "grid-template-columns:repeat(auto-fill,minmax(320px,1fr))" });
+      cards.forEach(card => {
+        const usageBox = el("div", { class: "body" });
+        const cardEl = el("div", { class: "cred-card" }, [
+          el("div", { class: "head" }, [
+            el("div", null, [
+              el("div", { text: card.label || card.key_id }),
+              el("div", { class: "tiny mono", text: card.key_id }),
+            ]),
+            el("button", { class: "btn small", onClick: () => guard(async () => {
+              const r = await api("/quota-usage", { method: "POST", body: JSON.stringify({ key_id: card.key_id }) });
+              renderQuotaCard(usageBox, r);
+              if (r.error) toast(r.error, "err");
+            })}, ["刷新"]),
+          ]),
+          usageBox,
+        ]);
+        if (card.email) renderQuotaCard(usageBox, { usage: null, email: card.email, label: card.label });
+        else usageBox.appendChild(el("div", { class: "tiny", text: "点击刷新查询额度。" }));
+        grid.appendChild(cardEl);
+        if (card.email) {
+          // auto-refresh once for cards already linked to an account
+          api("/quota-usage", { method: "POST", body: JSON.stringify({ key_id: card.key_id }) })
+            .then(r => renderQuotaCard(usageBox, r)).catch(() => {});
+        }
+      });
+      root.appendChild(grid);
+    });
+  }
+  function renderQuotaCard(box, data) {
+    clear(box);
+    if (data.error) { box.appendChild(el("div", { class: "tiny", style: "color:var(--danger)", text: data.error })); return; }
+    const u = data.usage;
+    if (!u) { box.appendChild(el("div", { class: "tiny", text: "暂无额度数据。" })); return; }
+    box.appendChild(el("div", { class: "row between" }, [
+      el("span", { class: "pill ok", text: u.plan || "套餐未知" }),
+      el("span", { class: "tiny", text: "剩余 " + (u.credits_left ?? "?") + " credits" }),
+    ]));
+    box.appendChild(windowRow("5 小时窗口", u.five_hour));
+    box.appendChild(windowRow("每周窗口", u.weekly));
+    if (u.month) box.appendChild(windowRow("月度额度", u.month));
+    box.appendChild(el("div", { class: "tiny", style: "margin-top:8px", text: "刷新于 " + fmtTime(u.refreshed_at) }));
+  }
+
+  // ---- logs ----
+  let logState = { search: "", status: "all", offset: 0, limit: 50 };
+  async function renderLogs(reset) {
+    const root = document.getElementById("tab-logs");
+    clear(root);
+    if (reset) logState.offset = 0;
+    await guard(async () => {
+      const q = new URLSearchParams({ limit: logState.limit, offset: logState.offset, search: logState.search, status: logState.status });
+      const data = await api("/logs?" + q.toString());
+      const summary = data.summary || {};
+      root.appendChild(el("div", { class: "grid cols" }, [
+        statCard("请求数", summary.requests),
+        statCard("成功 / 失败", (summary.success || 0) + " / " + (summary.failed || 0)),
+        statCard("输入 / 输出 tokens", (summary.input_tokens || 0) + " / " + (summary.output_tokens || 0)),
+        statCard("缓存命中率", summary.cache_rate ? (summary.cache_rate * 100).toFixed(1) + "%" : "—"),
+        statCard("平均耗时", fmtDur(summary.avg_duration_ms)),
+      ]));
+      const search = el("input", { placeholder: "搜索模型 / 错误 / 账号", value: logState.search });
+      const statusSel = el("select", null, [
+        el("option", { value: "all", text: "全部" }),
+        el("option", { value: "success", text: "成功" }),
+        el("option", { value: "error", text: "失败" }),
+      ]);
+      statusSel.value = logState.status;
+      root.appendChild(el("div", { class: "card" }, [
+        el("div", { class: "row between" }, [
+          el("div", { class: "row" }, [
+            search,
+            statusSel,
+            el("button", { class: "btn", onClick: () => { logState.search = search.value.trim(); logState.status = statusSel.value; renderLogs(true); } }, ["筛选"]),
+          ]),
+          el("button", { class: "btn danger", onClick: () => guard(async () => {
+            if (!confirm("清空全部请求日志？")) return;
+            await api("/logs/reset", { method: "POST" }); toast("已清空", "ok"); renderLogs(true);
+          })}, ["清空日志"]),
+        ]),
+      ]));
+      const items = data.items || [];
+      if (!items.length) {
+        root.appendChild(el("div", { class: "card empty", text: "暂无请求日志。" }));
+        return;
+      }
+      const wrap = el("div", { class: "table-wrap" });
+      const table = el("table");
+      table.appendChild(el("thead", null, [el("tr", null, [
+        el("th", { text: "时间" }), el("th", { text: "模型" }), el("th", { text: "格式" }),
+        el("th", { text: "状态" }), el("th", { text: "耗时" }), el("th", { text: "首字" }),
+        el("th", { text: "Tokens(入/出)" }), el("th", { text: "错误" }),
+      ])]));
+      const tbody = el("tbody");
+      items.forEach(v => {
+        tbody.appendChild(el("tr", null, [
+          el("td", { class: "tiny", text: fmtTime(v.time) }),
+          el("td", null, [el("div", { class: "mono", text: v.model || v.upstream_model || "—" }),
+                          v.upstream_model && v.upstream_model !== v.model ? el("div", { class: "tiny mono", text: v.upstream_model }) : null]),
+          el("td", null, [el("span", { class: "pill", text: (v.source_format || "?") + (v.stream ? " · 流" : "") })]),
+          el("td", null, [el("span", { class: "pill " + (v.status >= 400 || !v.status ? "err" : "ok"), text: v.status || "—" })]),
+          el("td", { text: fmtDur(v.duration_ms) }),
+          el("td", { text: v.first_byte_ms ? fmtDur(v.first_byte_ms) : "—" }),
+          el("td", { text: (v.input_tokens || 0) + " / " + (v.output_tokens || 0) }),
+          el("td", null, [v.error ? el("span", { class: "tiny", style: "color:var(--danger)", text: v.error }) : el("span", { class: "tiny muted", text: "—" })]),
+        ]));
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      root.appendChild(wrap);
+      const total = data.total || 0;
+      root.appendChild(el("div", { class: "pager" }, [
+        el("span", { class: "tiny", text: `共 ${total} 条` }),
+        el("button", { class: "btn small", disabled: logState.offset <= 0, onClick: () => { logState.offset = Math.max(0, logState.offset - logState.limit); renderLogs(); } }, ["上一页"]),
+        el("button", { class: "btn small", disabled: logState.offset + logState.limit >= total, onClick: () => { logState.offset += logState.limit; renderLogs(); } }, ["下一页"]),
+      ]));
+    });
+  }
+
+  // ---- stats ----
+  async function renderStats() {
+    const root = document.getElementById("tab-stats");
+    clear(root);
+    await guard(async () => {
+      const data = await api("/statistics");
+      const s = data.summary || {};
+      root.appendChild(el("div", { class: "grid cols" }, [
+        statCard("总请求", s.requests),
+        statCard("成功", s.success),
+        statCard("失败", s.failed),
+        statCard("输入 tokens", s.input_tokens),
+        statCard("输出 tokens", s.output_tokens),
+        statCard("缓存 tokens", s.cached_tokens),
+      ]));
+      const models = data.models || [];
+      if (!models.length) { root.appendChild(el("div", { class: "card empty", text: "暂无统计数据。" })); return; }
+      const wrap = el("div", { class: "table-wrap" });
+      const table = el("table");
+      table.appendChild(el("thead", null, [el("tr", null, [
+        el("th", { text: "模型" }), el("th", { text: "请求" }), el("th", { text: "成功" }),
+        el("th", { text: "失败" }), el("th", { text: "输入" }), el("th", { text: "输出" }),
+        el("th", { text: "缓存" }), el("th", { text: "平均耗时" }),
+      ])]));
+      const tbody = el("tbody");
+      models.forEach(m => tbody.appendChild(el("tr", null, [
+        el("td", { class: "mono", text: m.model }),
+        el("td", { text: m.requests }),
+        el("td", { text: m.success }),
+        el("td", { text: m.failed }),
+        el("td", { text: m.input_tokens }),
+        el("td", { text: m.output_tokens }),
+        el("td", { text: m.cached_tokens }),
+        el("td", { text: fmtDur(m.avg_duration_ms) }),
+      ])));
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      root.appendChild(wrap);
+    });
+  }
+
+  // ---- settings ----
+  async function renderSettings() {
+    const root = document.getElementById("tab-settings");
+    clear(root);
+    await guard(async () => {
+      const c = await api("/config");
+      const f = {};
+      f.base_url = el("input", { value: c.base_url || "", style: "min-width:320px" });
+      f.catalog_url = el("input", { value: c.catalog_url || "", style: "min-width:320px" });
+      f.prefix_enabled = el("input", { type: "checkbox" }); f.prefix_enabled.checked = !!c.model_prefix?.enabled;
+      f.prefix_value = el("input", { value: c.model_prefix?.value || "commandcode" });
+      f.chat = el("input", { type: "checkbox" }); f.chat.checked = !!c.protocols?.chat_completions;
+      f.messages = el("input", { type: "checkbox" }); f.messages.checked = !!c.protocols?.messages;
+      f.responses = el("input", { type: "checkbox" }); f.responses.checked = !!c.protocols?.responses;
+      f.allow_http = el("input", { type: "checkbox" }); f.allow_http.checked = !!c.allow_http;
+      f.request_timeout = el("input", { value: c.request_timeout || "5m0s" });
+      f.refresh_interval = el("input", { value: c.refresh_interval || "15m0s" });
+      f.max_response_bytes = el("input", { type: "number", value: c.max_response_bytes || 67108864 });
+
+      root.appendChild(el("div", { class: "card" }, [
+        el("h3", { text: "上游与目录" }),
+        el("div", { class: "grid cols" }, [
+          el("label", { class: "field" }, [el("span", { text: "Base URL" }), f.base_url]),
+          el("label", { class: "field" }, [el("span", { text: "Catalog URL（留空自动）" }), f.catalog_url]),
+          el("label", { class: "field" }, [el("span", { text: "目录刷新间隔" }), f.refresh_interval]),
+          el("label", { class: "field" }, [el("span", { text: "请求超时" }), f.request_timeout]),
+          el("label", { class: "field" }, [el("span", { text: "最大响应字节" }), f.max_response_bytes]),
+        ]),
+        el("label", { class: "check", style: "margin-top:12px" }, [f.allow_http, el("span", { text: "允许 http://（仅本地测试）" })]),
+      ]));
+      root.appendChild(el("div", { class: "card" }, [
+        el("h3", { text: "客户端模型前缀" }),
+        el("div", { class: "row" }, [
+          el("label", { class: "check" }, [f.prefix_enabled, el("span", { text: "启用前缀" })]),
+          el("label", { class: "field" }, [el("span", { text: "前缀值" }), f.prefix_value]),
+        ]),
+      ]));
+      root.appendChild(el("div", { class: "card" }, [
+        el("h3", { text: "协议开关" }),
+        el("div", { class: "row" }, [
+          el("label", { class: "check" }, [f.chat, el("span", { text: "Chat Completions" })]),
+          el("label", { class: "check" }, [f.messages, el("span", { text: "Messages" })]),
+          el("label", { class: "check" }, [f.responses, el("span", { text: "Responses" })]),
+        ]),
+        el("p", { class: "tiny", text: "CommandCode 的 OSS 模型默认走 chat-completions；关闭某协议会从目录中排除对应路由的模型。" }),
+      ]));
+      try { root.appendChild(await reasoningSection()); } catch (_) {}
+      const authStateEl = el("span", { class: "tiny", text: authState() });
+      root.appendChild(el("div", { class: "card" }, [
+        el("h3", { text: "授权与密钥" }),
+        el("p", { class: "tiny", text: "控制台通过 CPA 管理接口读写配置：先复用同源 CPA / CPAMP 记住的登录，授权失败时再输入当前站点的管理密钥。" }),
+        el("div", { class: "row between" }, [
+          authStateEl,
+          el("div", { class: "row" }, [
+            el("button", { class: "btn", onClick: () => { AUTH.clear(); authStateEl.textContent = authState(); toast("已清除本地管理密钥", "ok"); } }, ["清除密钥"]),
+            el("button", { class: "btn primary", onClick: () => openAuthDialog("") }, ["管理密钥"]),
+          ]),
+        ]),
+      ]));
+      root.appendChild(el("div", { class: "row end" }, [
+        el("button", { class: "btn primary", onClick: () => guard(async () => {
+          const body = {
+            base_url: f.base_url.value.trim(),
+            catalog_url: f.catalog_url.value.trim() || null,
+            model_prefix: { enabled: f.prefix_enabled.checked, value: f.prefix_value.value.trim() || "commandcode" },
+            protocols: { chat_completions: f.chat.checked, messages: f.messages.checked, responses: f.responses.checked },
+            allow_http: f.allow_http.checked,
+            request_timeout: f.request_timeout.value.trim(),
+            refresh_interval: f.refresh_interval.value.trim(),
+            max_response_bytes: Number(f.max_response_bytes.value) || 67108864,
+          };
+          const r = await api("/config", { method: "PUT", body: JSON.stringify(body) });
+          toast(r.message || "已保存", "ok"); renderSettings(); loadStatus();
+        })}, ["保存设置"]),
+      ]));
+      if (!c.data_dir) root.appendChild(el("p", { class: "tiny", text: "提示：未配置 data-dir 时，页面设置与日志仅保存在内存，重启后丢失。" }));
+    });
+  }
+
+  // ---- reasoning effort mapping editor ----
+  async function reasoningSection() {
+    const data = await api("/reasoning");
+    const levels = data.levels || [];
+    const models = data.models || [];
+    const rows = el("tbody");
+    const makeRow = (rule) => {
+      const modelSel = el("select");
+      modelSel.appendChild(el("option", { value: "", text: "默认（所有模型）" }));
+      models.forEach(id => {
+        const o = el("option", { value: id, text: id });
+        if (rule.model === id) o.selected = true;
+        modelSel.appendChild(o);
+      });
+      if (rule.model && !models.includes(rule.model)) {
+        const o = el("option", { value: rule.model, text: rule.model });
+        o.selected = true;
+        modelSel.appendChild(o);
+      }
+      const fromInput = el("input", { value: rule.from || "", list: "cc-effort", style: "width:130px" });
+      const toInput = el("input", { value: rule.to || "", list: "cc-effort", style: "width:130px" });
+      const tr = el("tr", null, [
+        el("td", null, [modelSel]),
+        el("td", null, [fromInput]),
+        el("td", null, [toInput]),
+        el("td", null, [el("button", { class: "btn small danger", onClick: () => tr.remove() }, ["删除"])]),
+      ]);
+      return tr;
+    };
+    (data.rules || []).forEach(r => rows.appendChild(makeRow(r)));
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, [
+        el("th", { text: "模型" }), el("th", { text: "客户端强度" }), el("th", { text: "上游强度" }), el("th", { text: "" }),
+      ])]),
+      rows,
+    ]);
+    return el("div", { class: "card" }, [
+      el("h3", { text: "思考强度映射" }),
+      el("datalist", { id: "cc-effort" }, levels.map(v => el("option", { value: v }))),
+      el("p", { class: "tiny", text: "把客户端声明的 reasoning_effort 改写成上游值（例如 medium → high）。上游强度填 omit 可移除该字段；模型留空为默认规则，模型专属规则优先。" }),
+      el("div", { class: "table-wrap", style: "margin-top:8px" }, [table]),
+      el("div", { class: "row between", style: "margin-top:10px" }, [
+        el("button", { class: "btn", onClick: () => rows.appendChild(makeRow({})) }, ["添加规则"]),
+        el("button", { class: "btn primary", onClick: () => guard(async () => {
+          const rules = [];
+          rows.querySelectorAll("tr").forEach(tr => {
+            const sel = tr.querySelector("select");
+            const inputs = tr.querySelectorAll("input");
+            const from = inputs[0].value.trim();
+            const to = inputs[1].value.trim();
+            if (from && to) rules.push({ model: sel.value, from, to });
+          });
+          const r = await api("/reasoning", { method: "PUT", body: JSON.stringify({ rules }) });
+          toast(r.message || "已保存", "ok");
+        })}, ["保存映射"]),
+      ]),
+    ]);
+  }
+
+  const RENDER = {
+    overview: renderOverview, credentials: renderCredentials, models: renderModels,
+    quota: renderQuota, logs: () => renderLogs(false), stats: renderStats, settings: renderSettings,
+  };
+
+  document.getElementById("reloadBtn").addEventListener("click", () => loadAll());
+
+  function loadAll() {
+    return guard(async () => {
+      await loadStatus();
+      await (RENDER[activeTab] || renderOverview)();
+    });
+  }
+
+  buildTabs();
+  loadAll();
+})();
+</script>
+</body>
+</html>
