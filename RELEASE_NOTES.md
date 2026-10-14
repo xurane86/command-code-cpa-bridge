@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.2.1
+
+- **修复控制台管理密钥无法生效**：`resources/index.html` 之前读取 `window.CCBridgeAuth` 对象，但注入的认证模块 `resources/auth.js` 只暴露了 `CCBridgeAuthHeaders / CCBridgeSaveAuth / CCBridgeClearAuth / CCBridgeRememberAuth` 这几个独立函数（与 ClinePassBridge 的 `cpa-auth.js` 同构），导致 `AUTH` 回退为空实现——请求从不携带 `Authorization` 头，保存密钥也无效，从而始终提示「管理密钥无效或已过期」。现改为直接复用这些独立函数。
+
 ## 0.2.0
 
 - **页面交互对齐 ClinePassBridge**：主题桥接（跟随宿主 `data-theme`、独立默认纯白）、独立认证模块 `resources/auth.js`（占位注入 + 反代前缀/版本段适配）、设置页「授权与密钥」面板（管理/清除密钥、失败弹窗提示）。

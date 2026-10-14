@@ -252,7 +252,15 @@ pre.err { background: var(--danger-weak); color: var(--danger); padding: 10px 12
   // The injected auth module already rewrote the meta base with this console's
   // own reverse-proxy prefix and /v0-vs-/v8 version; read it afterwards.
   const API = apiMeta.content;
-  const AUTH = window.CCBridgeAuth || { headers: () => ({}), save: () => {}, clear: () => {}, remember: () => false };
+  // The injected auth module mirrors ClinePassBridge's cpa-auth.js and exposes
+  // individual helpers on window; adapt them to the AUTH facade used below so the
+  // management key is actually attached to (and cleared from) every request.
+  const AUTH = {
+    headers: () => (typeof window.CCBridgeAuthHeaders === "function" ? window.CCBridgeAuthHeaders() : {}),
+    save: (key, type, remember) => { if (typeof window.CCBridgeSaveAuth === "function") window.CCBridgeSaveAuth(key, type, remember); },
+    clear: (rejectedHeaders) => { if (typeof window.CCBridgeClearAuth === "function") window.CCBridgeClearAuth(rejectedHeaders); },
+    remember: () => (typeof window.CCBridgeRememberAuth === "function" ? window.CCBridgeRememberAuth() : false),
+  };
 
   // ---- fetch wrapper ----
   async function api(path, options = {}) {
