@@ -278,6 +278,29 @@ func TestLoadRejections(t *testing.T) {
 	}
 }
 
+// TestDataDirDefaultAndAlias pins the zero-config contract: with no YAML at all
+// the plugin still persists under DefaultDataDir, and both the "data-dir" and
+// ClinePassBridge-style "data_dir" spellings are accepted.
+func TestDataDirDefaultAndAlias(t *testing.T) {
+	cfg, err := Load(nil)
+	if err != nil {
+		t.Fatalf("keyless Load: %v", err)
+	}
+	if cfg.DataDir != DefaultDataDir {
+		t.Fatalf("default data dir = %q, want %q", cfg.DataDir, DefaultDataDir)
+	}
+
+	if cfg, err = Load([]byte("data_dir: 'state/alias'\n")); err != nil || cfg.DataDir != "state/alias" {
+		t.Fatalf("data_dir alias: dir=%q err=%v", cfg.DataDir, err)
+	}
+	if cfg, err = Load([]byte("data-dir: 'state/hyphen'\n")); err != nil || cfg.DataDir != "state/hyphen" {
+		t.Fatalf("data-dir key: dir=%q err=%v", cfg.DataDir, err)
+	}
+	if cfg, err = Load([]byte("data-dir: '   '\n")); err != nil || cfg.DataDir != DefaultDataDir {
+		t.Fatalf("blank data-dir should fall back to the default: dir=%q err=%v", cfg.DataDir, err)
+	}
+}
+
 // TestLoadAcceptsKeylessConfig pins the page-managed-credentials contract: a
 // config with no YAML api-keys is valid because keys can live entirely as host
 // auth records.

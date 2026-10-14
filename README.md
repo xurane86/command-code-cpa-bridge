@@ -87,7 +87,9 @@
 
    从 [Releases](../../releases) 下载对应 ZIP 解压，或从源码构建（见下）。
 
-3. 在 CPA 配置中声明插件（**可选**；不写 YAML 也能完全靠页面管理）：
+3. **不需要在 CPA 里声明这个插件**。不写 `plugins.configs.command-code-cpa-bridge` 也能完整使用：所有设置都在控制台页面里改，并落到 `data-dir`（默认 `plugins/command-code-cpa-bridge-data`，相对 CPA 进程工作目录）。
+
+   仅当你要覆盖默认值时才需要写，例如：
 
    ```yaml
    plugins:
@@ -95,36 +97,16 @@
      dir: /data/plugins
      configs:
        command-code-cpa-bridge:
-         # 插件状态目录：页面设置与请求日志存放于此；不配则重启即失
+         # 可选：覆盖插件状态目录（默认 plugins/command-code-cpa-bridge-data）
          data-dir: "/data/plugins/command-code-cpa-bridge-data"
-
-         # 上游地址（默认 https://api.commandcode.ai/provider/v1）
+         # 可选：上游地址（也可在页面「设置」里改）
          base-url: "https://api.commandcode.ai/provider/v1"
-         # catalog-url: "https://api.commandcode.ai/provider/v1/models"
-
-         # 客户端模型前缀：true -> "commandcode/<模型>"
-         model-prefix:
-           enabled: true
-           value: "commandcode"
-
-         # 静态 API Key（可选；也可以全在页面里管理），支持 ${ENV_VAR}
+         # 可选：直接写死静态密钥（否则在页面「凭据」里添加），支持 ${ENV_VAR}
          api-keys:
-           - value: "user_xxx"
            - value: "${COMMANDCODE_API_KEY}"
-
-         catalog:
-           refresh-interval: "15m"
-           stale-while-unavailable: true
-
-         protocols:
-           chat-completions: true
-           messages: true
-           responses: true
-
-         request-timeout: "5m"
-         max-response-bytes: 67108864
-         allow-http: false
    ```
+
+   其余都有默认值：客户端前缀 `commandcode/`、三种协议全开、目录刷新 15m、请求超时 5m。
 
 4. 打开控制台：`/v0/resource/plugins/command-code-cpa-bridge/console`
 
@@ -138,11 +120,11 @@
 
 | 配置项 | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `data-dir` | string | *(空)* | 页面设置与请求日志目录。为空时仅存内存 |
+| `data-dir` | string | `plugins/command-code-cpa-bridge-data` | 页面设置与请求日志目录（也接受 `data_dir` 写法）；相对路径基于 CPA 进程工作目录 |
 | `base-url` | string | `https://api.commandcode.ai/provider/v1` | 上游地址（https；http 需 `allow-http`） |
 | `catalog-url` | string | `{base-url}/models` | 目录发现地址 |
 | `model-prefix.enabled` / `.value` | bool / string | `true` / `commandcode` | 客户端模型前缀 |
-| `api-keys[].value` | string | — | 静态密钥，支持 `${ENV_VAR}`；可留空，改用页面管理 |
+| `api-keys[].value` | string | *(空)* | 静态密钥，支持 `${ENV_VAR}`；留空则全由页面「凭据」管理 |
 | `catalog.refresh-interval` | duration | `15m` | 目录轮询间隔（最小 `1m`） |
 | `catalog.stale-while-unavailable` | bool | `true` | 刷新失败时继续提供上次快照 |
 | `protocols.*` | bool | `true` | 协议开关；关闭即从目录排除对应路由的模型 |
@@ -150,7 +132,7 @@
 | `max-response-bytes` | int | `67108864` | 非流式响应体上限 |
 | `allow-http` | bool | `false` | 允许 http:// 上游（仅本地测试） |
 
-页面「设置」中保存的值会作为覆盖层优先生效（`base-url` 变更时自动重算 `catalog-url`）。
+**整张表都是可选的**：唯一的硬性前提是宿主开启插件系统（`plugins.enabled: true` 与 `plugins.dir`）。页面「设置」中保存的值会作为覆盖层优先生效（`base-url` 变更时自动重算 `catalog-url`）。
 
 ---
 

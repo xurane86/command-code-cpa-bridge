@@ -13,13 +13,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Defaults (/).
+// Defaults.
 const (
 	DefaultBaseURL          = "https://api.commandcode.ai/provider/v1"
 	DefaultModelPrefix      = "commandcode"
 	DefaultRefreshInterval  = 15 * time.Minute
 	DefaultRequestTimeout   = 5 * time.Minute
 	DefaultMaxResponseBytes = int64(67108864) // 64 MiB
+	// DefaultDataDir is where page settings and request logs persist when the
+	// host config does not set data-dir. It is relative to the CPA process
+	// working directory, matching the plugin-state convention.
+	DefaultDataDir = "plugins/command-code-cpa-bridge-data"
 )
 
 type ModelPrefix struct {
@@ -139,6 +143,7 @@ type rawConfig struct {
 	RequestTimeout   *string                  `yaml:"request-timeout"`
 	MaxResponseBytes *int64                   `yaml:"max-response-bytes"`
 	DataDir          *string                  `yaml:"data-dir"`
+	DataDirAlt       *string                  `yaml:"data_dir"`
 }
 
 type rawPrefix struct {
@@ -212,7 +217,7 @@ func Load(yamlBytes []byte) (Config, error) {
 		AllowHTTP:        raw.AllowHTTP,
 		RequestTimeout:   requestTimeout,
 		MaxResponseBytes: orDefault(raw.MaxResponseBytes, DefaultMaxResponseBytes),
-		DataDir:          strings.TrimSpace(orDefault(raw.DataDir, "")),
+		DataDir:          dataDirOrDefault(raw),
 	}
 	if raw.CatalogURL != nil {
 		// Mirror the derived-default trim so an explicit trailing-slash
@@ -343,4 +348,20 @@ func orDefault[T any](p *T, def T) T {
 		return *p
 	}
 	return def
+}
+
+// dataDirOrDefault resolves the persistent state directory, accepting both the
+// "data-dir" key and the ClinePassBridge-style "data_dir" alias, and falling
+// back to DefaultDataDir when unset or empty. This is what makes the per-plugin
+// config block optional: a page-managed setup persists with no YAML at all.
+func dataDirOrDefault(raw rawConfig) string {
+	value := raw.DataDir
+	if value == nil {
+		value = raw.DataDirAlt
+	}
+	dir := strings.TrimSpace(orDefault(value, ""))
+	if dir == "" {
+		return DefaultDataDir
+	}
+	return dir
 }

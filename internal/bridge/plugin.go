@@ -185,9 +185,9 @@ func registrationEnvelope() []byte {
 			Author:           "command-code",
 			GitHubRepository: githubRepoURL,
 			ConfigFields: []pluginapi.ConfigField{
-				{Name: "data-dir", Type: pluginapi.ConfigFieldTypeString, Description: "Persistent plugin state directory (settings, request logs)"},
-				{Name: "base-url", Type: pluginapi.ConfigFieldTypeString, Description: "CommandCode provider base URL"},
-				{Name: "api-keys", Type: pluginapi.ConfigFieldTypeArray, Description: "Static API keys; keys can also be managed from the console"},
+				{Name: "data-dir", Type: pluginapi.ConfigFieldTypeString, Description: "Persistent plugin state directory (default plugins/command-code-cpa-bridge-data)"},
+				{Name: "base-url", Type: pluginapi.ConfigFieldTypeString, Description: "CommandCode provider base URL (default https://api.commandcode.ai/provider/v1)"},
+				{Name: "api-keys", Type: pluginapi.ConfigFieldTypeArray, Description: "Optional static API keys; keys are normally managed from the console"},
 			},
 		},
 		Capabilities: capabilities{

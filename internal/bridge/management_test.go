@@ -103,7 +103,8 @@ func TestPublicationControlsModelListing(t *testing.T) {
 	f := &fakeCaller{responder: catalogResponder(true, testCatalogJSON)}
 	m := NewManager(NewHostBridge(f.call))
 	defer func() { _, _ = m.HandleCall(pluginabi.MethodPluginShutdown, nil) }()
-	if _, err := m.HandleCall(pluginabi.MethodPluginRegister, lifecycleRequestBody(dummyKeyYAML)); err != nil {
+	yamlText := "data-dir: '" + filepath.ToSlash(t.TempDir()) + "'\napi-keys:\n  - value: sk-publish\n"
+	if _, err := m.HandleCall(pluginabi.MethodPluginRegister, lifecycleRequestBody(yamlText)); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 

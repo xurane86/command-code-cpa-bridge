@@ -904,7 +904,7 @@ pre.err { background: var(--danger-weak); color: var(--danger); padding: 10px 12
           toast(r.message || "已保存", "ok"); renderSettings(); loadStatus();
         })}, ["保存设置"]),
       ]));
-      if (!c.data_dir) root.appendChild(el("p", { class: "tiny", text: "提示：未配置 data-dir 时，页面设置与日志仅保存在内存，重启后丢失。" }));
+      root.appendChild(el("p", { class: "tiny", text: "页面设置与请求日志保存在：" + (c.data_dir || "插件默认目录") }));
     });
   }
 
