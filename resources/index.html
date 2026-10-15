@@ -1,997 +1,1225 @@
 <!doctype html>
 <html lang="zh-CN" data-theme="white">
 <head>
-<meta charset="utf-8">
-<script>
-  // Resolve the host theme before styles or content paint (mirrors the
-  // ClinePassBridge console): follow the embedding CPA / CPAMP frame, otherwise
-  // fall back to the panel's saved theme, defaulting to pure white standalone.
-  (() => {
-    function applyTheme(value) {
-      document.documentElement.dataset.theme = value === 'dark' || value === 'light' ? value : 'white';
+  <meta charset="utf-8">
+  <script>
+    // Resolve the host theme before styles or content paint (mirrors the
+    // ClinePassBridge console): follow the embedding CPA / CPAMP frame,
+    // otherwise fall back to the panel's saved theme, defaulting to pure white.
+    (() => {
+      function applyTheme(value) {
+        document.documentElement.dataset.theme = value === 'dark' || value === 'light' ? value : 'white';
+      }
+      function syncTheme() {
+        try {
+          if (window.parent !== window) {
+            document.documentElement.classList.add('embedded');
+            applyTheme(window.parent.document.documentElement.getAttribute('data-theme') || 'light');
+            return true;
+          }
+        } catch { if (window.parent !== window) document.documentElement.classList.add('embedded'); }
+        try {
+          const saved = JSON.parse(localStorage.getItem('cli-proxy-theme') || '{}').state?.theme;
+          applyTheme(saved === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'white') : saved);
+        } catch { applyTheme(null); }
+        return false;
+      }
+      if (syncTheme()) new MutationObserver(syncTheme).observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+      window.addEventListener('storage', (event) => { if (event.key === 'cli-proxy-theme') syncTheme(); });
+      matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
+    })();
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="cpa-api-base" content="__API_BASE__">
+  <title>CommandCode 控制台</title>
+  <style>
+    :root {
+      color-scheme: light;
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      --bg: #f0eee8; --surface: #fffdf9; --surface-2: #f0eee8; --ink: #2d2a26;
+      --muted: #6d6760; --line: #d5d2cb; --accent: #8b8680; --accent-hover: #7f7a74; --accent-ink: #fff;
+      --success: #087c54; --warn: #985d0a; --danger: #b8493a; --focus: #726d67;
+      --inset-bg: color-mix(in srgb, var(--surface-2) 35%, var(--surface));
+      --inset-line: color-mix(in srgb, var(--line) 75%, var(--surface));
+      --code-bg: #f0eee8; --shadow: 0 1px 2px rgba(0, 0, 0, .08);
     }
-    function syncTheme() {
-      try {
-        if (window.parent !== window) {
-          document.documentElement.classList.add('embedded');
-          applyTheme(window.parent.document.documentElement.getAttribute('data-theme') || 'light');
-          return true;
-        }
-      } catch (_) { if (window.parent !== window) document.documentElement.classList.add('embedded'); }
-      try {
-        const saved = JSON.parse(localStorage.getItem('cli-proxy-theme') || '{}').state?.theme;
-        applyTheme(saved === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'white') : saved);
-      } catch (_) { applyTheme(null); }
-      return false;
+    :root[data-theme="white"] { --bg: #fff; --surface: #fff; --surface-2: #f6f6f6; --line: #d9d9d9; --code-bg: #f6f6f6; }
+    :root[data-theme="dark"] { color-scheme: dark; --bg: #1d1b18; --surface: #1d1b18; --surface-2: #262320; --ink: #f6f4f1; --muted: #c9c3bb; --line: #4a453f; --accent: #8b8680; --accent-hover: #9a948e; --accent-ink: #fff; --success: #6ee7b7; --warn: #f2c77c; --danger: #f1a399; --focus: #a6a099; --code-bg: #262320; --shadow: 0 1px 3px rgba(0, 0, 0, .3); }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .shell { max-width: 1580px; margin: 0 auto; padding: 16px clamp(16px, 3vw, 40px) 40px; }
+    .topbar, .heading, .section-head, .toolbar, .pagination, .row-main, .detail-head, .field-line, .credential-row, .model-row, .panel-head, .form-foot { display: flex; align-items: center; gap: 12px; }
+    .topbar { min-height: 40px; }
+    .brand { display: flex; align-items: center; gap: 11px; min-width: 0; font-weight: 700; font-size: 15px; }
+    .brandmark { width: 32px; height: 32px; display: block; border-radius: 8px; flex: none; }
+    h1 { margin: 0; font-size: 20px; line-height: 1.3; }
+    h2 { margin: 0; font-size: 16px; line-height: 1.3; }
+    p { margin: 0; }
+    .version { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .topbar .version { margin-left: auto; }
+    .button { min-height: 38px; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); font-weight: 600; transition: border-color .16s, background .16s; white-space: nowrap; }
+    .button:hover:not(:disabled) { border-color: var(--accent); background: var(--code-bg); }
+    .button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .button.danger { background: #c65746; border-color: #c65746; color: #fff; }
+    .button.danger:hover:not(:disabled) { background: #ae4738; border-color: #ae4738; }
+    .button.compact { min-height: 32px; padding: 4px 9px; font-size: 12px; }
+    .button.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+    .button.ghost:hover:not(:disabled) { color: var(--ink); background: var(--surface-2); }
+    .badge { display: inline-flex; align-items: center; gap: 5px; min-height: 22px; padding: 2px 7px; border-radius: 4px; background: var(--code-bg); color: var(--muted); font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .badge.good { background: color-mix(in srgb, var(--success) 12%, var(--surface)); color: var(--success); }
+    .badge.warn { background: color-mix(in srgb, var(--warn) 14%, var(--surface)); color: var(--warn); }
+    .badge.bad { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); }
+    .notice { margin: 14px 0 0; padding: 10px 13px; border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line)); border-left: 3px solid var(--warn); border-radius: 4px; color: var(--ink); background: color-mix(in srgb, var(--warn) 7%, var(--surface)); }
+    .notice.error { border-color: color-mix(in srgb, var(--danger) 30%, var(--line)); border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, var(--surface)); }
+    .notice[hidden], [hidden] { display: none !important; }
+    .tabs { display: flex; gap: 8px; margin: 6px 0 24px; padding: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 65%, var(--bg)); overflow-x: auto; overflow-y: hidden; }
+    .tab { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 0; border-radius: 10px 10px 0 0; background: transparent; color: var(--muted); padding: 11px 16px; font-weight: 600; flex-shrink: 0; transition: background .16s, color .16s; }
+    .tab svg { width: 16px; height: 16px; flex: none; }
+    .tab:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 3%, var(--bg)); }
+    .tab[aria-selected="true"] { color: var(--ink); }
+    .tab[aria-selected="true"]::after { content: ''; position: absolute; bottom: -1px; left: 12px; right: 12px; height: 2px; background: var(--ink); }
+    .section-head { justify-content: space-between; margin: 20px 0 14px; }
+    .toolbar { flex-wrap: wrap; margin-bottom: 14px; }
+    .control { height: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); padding: 7px 10px; min-width: 0; }
+    .control::placeholder { color: var(--muted); }
+    .search { width: min(330px, 100%); flex: 1 1 220px; }
+    .count { margin-left: auto; color: var(--muted); white-space: nowrap; font-size: 12px; }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .summary-item { padding: 14px 16px; min-width: 0; background: var(--inset-bg); border: 1px solid var(--inset-line); border-radius: 8px; }
+    .summary-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+    .summary-value { font-weight: 700; font-size: 17px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+    .summary-note { color: var(--muted); font-size: 11px; margin-top: 2px; overflow-wrap: anywhere; }
+    .panel { min-width: 0; padding: 22px; border: 1px solid color-mix(in srgb, var(--line) 70%, var(--surface)); border-radius: 12px; background: var(--surface); }
+    .panel.log-controls { padding: 16px; margin-bottom: 16px; }
+    .panel-head { justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+    .panel-head > div { min-width: 0; }
+    .panel-hint { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .row-actions { display: flex; gap: 5px; flex: none; flex-wrap: wrap; }
+    .config-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+    .config-side { display: grid; gap: 24px; min-width: 0; }
+    .form-stack { display: grid; gap: 12px; margin-top: 15px; }
+    .field { display: grid; gap: 5px; min-width: 0; }
+    .field label { color: var(--muted); font-size: 12px; font-weight: 600; }
+    .field .control { width: 100%; }
+    .field-line { align-items: end; justify-content: space-between; }
+    .field-line .field { flex: 1; }
+    .form-foot { justify-content: flex-end; gap: 8px; margin-top: 2px; }
+    .config-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+    .config-meta > div { padding: 10px 0; border-top: 1px solid var(--line); min-width: 0; }
+    .inline-state { color: var(--muted); font-size: 12px; min-height: 18px; margin-top: 8px; }
+    .inline-state:empty { display: none; }
+    .switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; min-height: 36px; }
+    .switch input { appearance: none; width: 34px; height: 20px; border: 1px solid var(--line); border-radius: 20px; background: var(--inset-bg); position: relative; margin: 0; flex: none; cursor: pointer; }
+    .switch input::before { content: ''; position: absolute; width: 14px; height: 14px; top: 2px; left: 2px; border-radius: 50%; background: var(--muted); transition: transform 120ms ease; }
+    .switch input:checked { background: var(--accent); border-color: var(--accent); }
+    .switch input:checked::before { background: #fff; transform: translateX(14px); }
+    .mono, code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .mono { font-size: 12px; }
+    .subtext { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .primary-text { font-weight: 650; }
+    .truncate { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .error-text { color: var(--danger); overflow-wrap: anywhere; white-space: pre-wrap; }
+
+    /* ---- request log list ---- */
+    #logsPanel { --log-columns: minmax(104px, .8fr) minmax(150px, 1.5fr) minmax(78px, .62fr) minmax(76px, .62fr) minmax(92px, .8fr) minmax(104px, .9fr) minmax(128px, 1fr) 14px; max-width: 1500px; margin-inline: auto; }
+    .log-head { display: grid; grid-template-columns: var(--log-columns); gap: 6px; padding: 0 13px 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
+    .log-list { display: grid; gap: 6px; }
+    .log-entry { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
+    .log-entry[open] { background: var(--inset-bg); box-shadow: inset 3px 0 var(--accent); }
+    .log-entry > summary { list-style: none; cursor: pointer; }
+    .log-entry > summary::-webkit-details-marker { display: none; }
+    .row-main { display: grid; grid-template-columns: var(--log-columns); gap: 6px; min-height: 78px; padding: 12px; align-items: center; font-size: 12px; line-height: 1.4; }
+    .log-model .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row-main .subtext { font-size: 11px; margin-top: 4px; }
+    .log-latency { display: grid; gap: 4px; width: 118px; max-width: 100%; }
+    .latency-line { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; border-left: 3px solid var(--metric-color, var(--line)); border-radius: 3px; padding: 2px 5px; background: color-mix(in srgb, var(--metric-color, var(--line)) 7%, var(--surface)); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .latency-line strong { color: var(--metric-color, var(--ink)); white-space: nowrap; }
+    .latency-line > span { color: var(--muted); font-size: 10px; flex-shrink: 0; }
+    .latency-line.good { --metric-color: var(--success); }
+    .latency-line.warn { --metric-color: var(--warn); }
+    .latency-line.bad { --metric-color: var(--danger); }
+    .log-usage { display: flex; flex-wrap: wrap; gap: 0 4px; font-variant-numeric: tabular-nums; }
+    .log-usage > span { white-space: nowrap; }
+    .cell { min-width: 0; overflow-wrap: anywhere; }
+    .cell-label { display: none; color: var(--muted); font-size: 11px; }
+    .chevron { color: var(--muted); font-size: 18px; line-height: 1; transform: rotate(0); transition: transform .16s; }
+    details[open] .chevron { transform: rotate(90deg); }
+    .row-main:hover { background: color-mix(in srgb, var(--accent) 3%, var(--surface)); }
+    .row-main .badge { max-width: 100%; white-space: normal; }
+    .detail { border-top: 1px solid var(--line); padding: 15px 18px; }
+    .detail-head { align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+    .detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 20px; }
+    .datum-label { color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+    .datum-value { overflow-wrap: anywhere; font-size: 12px; }
+    .pagination { justify-content: flex-end; margin-top: 14px; color: var(--muted); font-size: 12px; }
+    .empty { padding: 48px 20px; text-align: center; color: var(--muted); }
+    .empty strong { display: block; color: var(--ink); font-size: 14px; margin-bottom: 4px; }
+
+    /* ---- data table ---- */
+    .table-scroll { overflow-x: auto; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; }
+    .data-table th, .data-table td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); }
+    .data-table tbody tr:last-child td { border-bottom: 0; }
+    .data-table td.num { font-variant-numeric: tabular-nums; }
+
+    /* ---- credentials ---- */
+    #credentialList { display: grid; gap: 14px; }
+    .credentials-panel { margin-bottom: 0; }
+    .credential-row { display: grid; grid-template-columns: minmax(180px, .9fr) minmax(0, 2fr); gap: 10px 24px; border: 1px solid var(--inset-line); border-radius: 9px; padding: 14px 18px 12px; min-width: 0; background: var(--inset-bg); }
+    .credential-main { align-self: start; min-width: 0; overflow-wrap: anywhere; }
+    .credential-title { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+    .credential-title .primary-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .credential-id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+    .credential-usage { display: contents; }
+    .usage-meters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+    .usage-meter { min-width: 0; }
+    .usage-meter-head { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; color: var(--muted); }
+    .usage-meter-head strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+    .usage-track { height: 6px; margin: 8px 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--line) 65%, var(--surface)); overflow: hidden; }
+    .usage-fill { display: block; height: 100%; background: var(--success); border-radius: inherit; }
+    .usage-meter.good strong { color: var(--success); }
+    .usage-meter.warn .usage-fill { background: #d8b45c; }
+    .usage-meter.warn strong { color: var(--warn); }
+    .usage-meter.bad .usage-fill { background: var(--danger); }
+    .usage-meter.bad strong { color: var(--danger); }
+    .usage-reset { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+    .usage-status { margin-top: 7px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+    .usage-status.stale { color: var(--warn); }
+    .credential-estimate-band { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: 12px; }
+    .credential-bottom { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid var(--inset-line); }
+    .credential-plan { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+    .credential-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+    .credential-footer .pagination { margin: 0; }
+    .credential-toggle { position: relative; display: inline-flex; align-items: center; gap: 10px; min-height: 36px; color: var(--muted); cursor: pointer; font-size: 12px; }
+    .credential-toggle input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+    .toggle-track { display: inline-block; width: 46px; height: 26px; border-radius: 999px; background: color-mix(in srgb, var(--muted) 30%, var(--surface)); transition: background .15s; pointer-events: none; }
+    .toggle-track::after { content: ""; display: block; width: 20px; height: 20px; margin: 3px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0002; transition: transform .15s; }
+    .credential-toggle input:checked + .toggle-track { background: #8c8983; }
+    .credential-toggle input:checked + .toggle-track::after { transform: translateX(20px); }
+    .credential-toggle:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+
+    /* ---- models ---- */
+    #modelList { display: grid; gap: 10px; }
+    .model-row { justify-content: space-between; flex-wrap: wrap; border: 1px solid var(--inset-line); border-radius: 8px; background: var(--inset-bg); padding: 14px; min-width: 0; }
+    .model-row > .model-main { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+    .tagline { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+    .model-publish { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: var(--muted); flex: none; }
+    .model-publish input { width: 17px; height: 17px; accent-color: var(--accent); }
+    .model-test-tools { margin: 0 0 14px; display: grid; gap: 6px; }
+    .model-test-tools label { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .model-test-result { min-width: 0; display: grid; gap: 7px; }
+    .model-test-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+    .model-test-result pre { margin: 0; padding: 12px; border: 1px solid var(--inset-line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; }
+
+    /* ---- reasoning mapping ---- */
+    .effort-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+    .effort-table th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; }
+    .effort-table th, .effort-table td { padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .effort-table th:last-child { width: 64px; }
+    .effort-table td:first-child { padding-right: 22px; }
+    .effort-table td:last-child { text-align: right; }
+    .effort-table .control { width: 100%; }
+    .effort-empty { color: var(--muted); text-align: center; padding: 20px 0; }
+
+    /* ---- dialogs ---- */
+    dialog { max-width: min(460px, calc(100vw - 32px)); width: 100%; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,.22); background: var(--surface); color: var(--ink); padding: 24px; }
+    dialog.dialog-wide { max-width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; }
+    dialog::backdrop { background: rgba(18, 29, 35, .52); }
+    dialog h2 { margin-bottom: 6px; }
+    dialog p { color: var(--muted); font-size: 12px; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    .auth-panel { grid-column: 1 / -1; }
+    .auth-panel .panel-hint { max-width: 880px; }
+    .toast { position: fixed; right: 18px; bottom: 18px; max-width: min(420px, calc(100vw - 36px)); border: 1px solid var(--line); border-radius: 6px; padding: 10px 13px; background: var(--ink); color: var(--surface); box-shadow: var(--shadow); z-index: 10; }
+
+    @media (prefers-reduced-motion: reduce) { .switch input::before, .toggle-track, .toggle-track::after, .chevron { transition: none; } }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme]) { color-scheme: dark; --bg: #1d1b18; --surface: #1d1b18; --surface-2: #262320; --ink: #f6f4f1; --muted: #c9c3bb; --line: #4a453f; --accent: #8b8680; --accent-hover: #9a948e; --accent-ink: #fff; --success: #6ee7b7; --warn: #f2c77c; --danger: #f1a399; --focus: #a6a099; --code-bg: #262320; --shadow: 0 1px 3px rgba(0,0,0,.3); }
     }
-    if (syncTheme()) new MutationObserver(syncTheme).observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
-    window.addEventListener('storage', (event) => { if (event.key === 'cli-proxy-theme') syncTheme(); });
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
-  })();
-</script>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="cpa-api-base" content="__API_BASE__">
-<title>CommandCode 控制台</title>
-<style>
-:root,
-:root[data-theme="white"] {
-  --bg: #f6f7f9;
-  --panel: #ffffff;
-  --panel-2: #f1f3f6;
-  --text: #1f2430;
-  --text-2: #5b6472;
-  --text-3: #8b94a3;
-  --border: #e2e6ec;
-  --primary: #2f6fed;
-  --primary-weak: #e8f0fe;
-  --danger: #d64545;
-  --danger-weak: #fdeceb;
-  --ok: #1f8a53;
-  --ok-weak: #e7f6ee;
-  --warn: #b7791f;
-  --warn-weak: #fdf3e3;
-  --radius: 10px;
-  --shadow: 0 1px 2px rgba(20, 30, 50, .06), 0 6px 16px rgba(20, 30, 50, .06);
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #0f1319;
-  --panel: #171c24;
-  --panel-2: #1e242e;
-  --text: #e6eaf0;
-  --text-2: #a4adbb;
-  --text-3: #6f7987;
-  --border: #2a323d;
-  --primary: #5a8bf5;
-  --primary-weak: #1d2a44;
-  --danger: #ec6a6a;
-  --danger-weak: #331d1d;
-  --ok: #4cc38a;
-  --ok-weak: #16301f;
-  --warn: #d9a441;
-  --warn-weak: #33280f;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 16px rgba(0, 0, 0, .35);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --bg: #0f1319;
-    --panel: #171c24;
-    --panel-2: #1e242e;
-    --text: #e6eaf0;
-    --text-2: #a4adbb;
-    --text-3: #6f7987;
-    --border: #2a323d;
-    --primary: #5a8bf5;
-    --primary-weak: #1d2a44;
-    --danger: #ec6a6a;
-    --danger-weak: #331d1d;
-    --ok: #4cc38a;
-    --ok-weak: #16301f;
-    --warn: #d9a441;
-    --warn-weak: #33280f;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 16px rgba(0, 0, 0, .35);
-  }
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
-body {
-  background: var(--bg);
-  color: var(--text);
-  font: 14px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-}
-a { color: var(--primary); }
-.hidden { display: none !important; }
-header.top {
-  position: sticky; top: 0; z-index: 20;
-  display: flex; align-items: center; gap: 12px;
-  padding: 14px 20px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-}
-header.top h1 { font-size: 16px; margin: 0; font-weight: 650; }
-header.top .spacer { flex: 1; }
-.badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 2px 9px; border-radius: 999px; font-size: 12px;
-  background: var(--panel-2); color: var(--text-2); border: 1px solid var(--border);
-}
-.badge.ok { background: var(--ok-weak); color: var(--ok); border-color: transparent; }
-.badge.err { background: var(--danger-weak); color: var(--danger); border-color: transparent; }
-nav.tabs {
-  display: flex; flex-wrap: wrap; gap: 4px;
-  padding: 8px 16px; background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  position: sticky; top: 57px; z-index: 19;
-}
-nav.tabs button {
-  appearance: none; border: 1px solid transparent; background: transparent;
-  color: var(--text-2); padding: 7px 13px; border-radius: 8px; cursor: pointer;
-  font-size: 14px; font-weight: 500;
-}
-nav.tabs button:hover { background: var(--panel-2); color: var(--text); }
-nav.tabs button.active { background: var(--primary-weak); color: var(--primary); }
-main { padding: 20px; max-width: 1240px; margin: 0 auto; }
-section { animation: fade .18s ease; }
-@keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; } }
-h2 { font-size: 15px; margin: 0 0 12px; font-weight: 650; }
-h3 { font-size: 13px; margin: 0 0 8px; color: var(--text-2); font-weight: 600; }
-.card {
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow);
-}
-.grid { display: grid; gap: 14px; }
-.grid.cols { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
-.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.row.between { justify-content: space-between; }
-.row.end { justify-content: flex-end; }
-.muted { color: var(--text-2); }
-.tiny { font-size: 12px; color: var(--text-3); }
-.mono { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
-.stack { display: flex; flex-direction: column; gap: 14px; }
-.stat { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
-.stat .k { font-size: 12px; color: var(--text-3); }
-.stat .v { font-size: 20px; font-weight: 650; margin-top: 3px; word-break: break-all; }
-button.btn {
-  appearance: none; border: 1px solid var(--border); background: var(--panel);
-  color: var(--text); padding: 7px 13px; border-radius: 8px; cursor: pointer; font-size: 13.5px;
-  transition: background .12s, border-color .12s;
-}
-button.btn:hover { background: var(--panel-2); }
-button.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
-button.btn.primary:hover { filter: brightness(1.06); }
-button.btn.danger { color: var(--danger); border-color: var(--border); }
-button.btn.danger:hover { background: var(--danger-weak); }
-button.btn.small { padding: 4px 9px; font-size: 12.5px; }
-button.btn:disabled { opacity: .55; cursor: not-allowed; }
-input, select, textarea {
-  background: var(--panel); color: var(--text); border: 1px solid var(--border);
-  border-radius: 8px; padding: 8px 10px; font: inherit; min-width: 0;
-}
-input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary-weak); border-color: var(--primary); }
-label.field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--text-2); }
-label.field > span { font-weight: 500; }
-label.check { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--text); }
-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-th { color: var(--text-3); font-weight: 600; font-size: 12px; white-space: nowrap; }
-tbody tr:hover { background: var(--panel-2); }
-.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
-.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; background: var(--panel-2); color: var(--text-2); }
-.pill.ok { background: var(--ok-weak); color: var(--ok); }
-.pill.err { background: var(--danger-weak); color: var(--danger); }
-.pill.warn { background: var(--warn-weak); color: var(--warn); }
-.bar { height: 8px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
-.bar > i { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
-.bar.exceeded > i { background: var(--danger); }
-.cred-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
-.cred-card .head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
-.win { margin-top: 10px; }
-.win .row { justify-content: space-between; font-size: 12.5px; color: var(--text-2); }
-.collapse { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
-.collapse > summary { cursor: pointer; padding: 12px 16px; font-weight: 600; font-size: 13.5px; }
-.collapse > .body { padding: 0 16px 16px; }
-.overlay {
-  position: fixed; inset: 0; z-index: 50; background: rgba(10, 14, 20, .45);
-  display: flex; align-items: center; justify-content: center; padding: 20px;
-}
-.overlay .box { background: var(--panel); border-radius: 14px; padding: 22px; width: 100%; max-width: 420px; box-shadow: var(--shadow); }
-#toast { position: fixed; right: 18px; bottom: 18px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
-.toast { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 8px; padding: 10px 14px; box-shadow: var(--shadow); max-width: 360px; font-size: 13px; }
-.toast.err { border-left-color: var(--danger); }
-.toast.ok { border-left-color: var(--ok); }
-.empty { text-align: center; color: var(--text-3); padding: 34px 10px; }
-.pager { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 10px; }
-pre.err { background: var(--danger-weak); color: var(--danger); padding: 10px 12px; border-radius: 8px; overflow: auto; font-size: 12.5px; }
-</style>
+    @media (max-width: 1080px) {
+      .log-head { display: none; }
+      .log-list { margin-top: 16px; }
+      .row-main { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: flex-start; }
+      .row-main .cell { flex: 1 1 30%; min-width: 120px; }
+      .row-main .chevron { margin-left: auto; }
+      .cell-label { display: block; margin-bottom: 2px; }
+      .config-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 740px) {
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .credential-row { grid-template-columns: 1fr; gap: 12px; }
+      .usage-meters { gap: 12px; }
+    }
+    @media (max-width: 480px) {
+      .summary-item { padding: 11px; }
+      .summary { gap: 8px; }
+      .panel { padding: 16px; }
+      .credential-row { padding: 14px 14px 12px; align-items: flex-start; }
+      .tab { padding: 8px 12px; }
+      .toolbar { gap: 8px; }
+      .count { margin-left: 0; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .field-line { display: grid; }
+      .pagination { justify-content: space-between; }
+      .credential-bottom { align-items: flex-start; flex-direction: column; gap: 8px; }
+      dialog { padding: 18px; }
+    }
+  </style>
 </head>
 <body>
-
-<div id="login" class="overlay hidden">
-  <div class="box">
-    <h2>授权与密钥</h2>
-    <p class="muted" style="margin-top:0">先复用同源 CPA / CPAMP 记住的登录；手动密钥验证成功后只保存在本标签页会话，勾选「在此浏览器记住管理密钥」后下次自动使用。</p>
-    <label class="field"><span>管理密钥</span><input id="loginKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="当前站点的 CPA 或 CPAMP 管理密钥"></label>
-    <label class="check" style="margin-top:10px"><input id="loginType" type="checkbox"> 使用 X-Management-Key 头</label>
-    <label class="check" style="margin-top:6px"><input id="loginRemember" type="checkbox"> 在此浏览器记住管理密钥</label>
-    <div class="row end" style="margin-top:16px">
-      <button class="btn" id="loginClear">清除密钥</button>
-      <button class="btn primary" id="loginBtn">保存并验证</button>
+  <main class="shell">
+    <div class="topbar">
+      <div class="brand">
+        <svg class="brandmark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--ink)"/><path d="M9 11l4.5 5L9 21" fill="none" stroke="var(--surface)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.5 21.5H23" fill="none" stroke="var(--surface)" stroke-width="2.3" stroke-linecap="round"/></svg>
+        <span>CommandCode</span>
+      </div>
+      <span class="version" id="version">v__VERSION__</span>
+      <button class="button compact ghost" id="reloadBtn" type="button">刷新全部</button>
     </div>
-    <div id="loginErr" class="tiny" style="color:var(--danger);margin-top:8px"></div>
-  </div>
-</div>
 
-<header class="top">
-  <h1>CommandCode 控制台</h1>
-  <span class="badge" id="statusBadge">加载中…</span>
-  <div class="spacer"></div>
-  <span class="tiny" id="versionLabel">v__VERSION__</span>
-  <button class="btn small" id="reloadBtn">刷新</button>
-</header>
+    <div class="notice error" id="globalError" role="alert" hidden></div>
 
-<nav class="tabs" id="tabs"></nav>
+    <div class="tabs" role="tablist" aria-label="管理视图">
+      <button class="tab" id="logsTab" role="tab" aria-selected="true" aria-controls="logsPanel" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3h8l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h3Z"/><path d="M15 3v5h5M8 12h8M8 16h5"/></svg><span>请求日志</span></button>
+      <button class="tab" id="credentialsTab" role="tab" aria-selected="false" aria-controls="credentialsPanel" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M18 8v6M15 11h6"/></svg><span>凭据管理</span></button>
+      <button class="tab" id="modelsTab" role="tab" aria-selected="false" aria-controls="modelsPanel" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h7v6H3zM14 13h7v6h-7zM10 8h7v5M7 11v5h7"/></svg><span>模型映射</span></button>
+      <button class="tab" id="configTab" role="tab" aria-selected="false" aria-controls="configPanel" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h7m4 0h5M4 17h3m4 0h9"/><circle cx="13" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>配置概览</span></button>
+    </div>
 
-<main>
-  <section id="tab-overview" class="stack"></section>
-  <section id="tab-credentials" class="stack hidden"></section>
-  <section id="tab-models" class="stack hidden"></section>
-  <section id="tab-quota" class="stack hidden"></section>
-  <section id="tab-logs" class="stack hidden"></section>
-  <section id="tab-stats" class="stack hidden"></section>
-  <section id="tab-settings" class="stack hidden"></section>
-</main>
+    <section id="logsPanel" role="tabpanel" aria-labelledby="logsTab">
+      <div class="panel log-controls">
+        <div class="panel-head">
+          <div>
+            <h2>请求日志</h2>
+            <p class="panel-hint">每条请求一行，展开可看详情。统计与列表的筛选相互独立：上方汇总跟随下方筛选。</p>
+          </div>
+          <div class="row-actions">
+            <button class="button compact" id="refreshLogs" type="button">刷新日志</button>
+            <button class="button compact danger" id="clearLogs" type="button">清空日志</button>
+          </div>
+        </div>
+        <div class="toolbar">
+          <input class="control search" id="logSearch" type="search" placeholder="搜索模型、上游、协议、错误或凭据" aria-label="搜索请求日志">
+          <select class="control" id="statusFilter" aria-label="按状态筛选"><option value="all">全部状态</option><option value="success">成功</option><option value="error">失败</option></select>
+          <span class="count" id="logCount">-- 条</span>
+        </div>
+        <div class="summary" id="logSummary" aria-label="当前筛选范围的汇总">
+          <div class="summary-item"><div class="summary-label">总请求数</div><div class="summary-value" id="statRequests">—</div></div>
+          <div class="summary-item" title="总 tokens = 输入 + 输出；缓存已包含在输入中，不重复相加。"><div class="summary-label">总 tokens</div><div class="summary-value" id="statTotalTokens">—</div><div class="summary-note">输入 <span id="statInputTokens">—</span> · 输出 <span id="statOutputTokens">—</span> · 缓存 <span id="statCachedTokens">—</span></div></div>
+          <div class="summary-item" title="输入 tokens 中命中缓存的比例；没有可用数据时显示 —。"><div class="summary-label">缓存命中率</div><div class="summary-value" id="statCacheRate">—</div></div>
+          <div class="summary-item"><div class="summary-label">平均耗时</div><div class="summary-value" id="statAvgDuration">—</div></div>
+        </div>
+      </div>
+      <div class="log-head" aria-hidden="true"><span>时间</span><span>客户端模型 / 上游</span><span>格式</span><span>结果</span><span>凭据</span><span>首字 / 耗时</span><span>用量</span><span></span></div>
+      <div class="log-list" id="logList" aria-live="polite"><div class="empty">正在读取日志…</div></div>
+      <div class="pagination">
+        <button class="button compact" id="prevPage" type="button">上一页</button>
+        <span id="pageInfo">第 1 页</span>
+        <button class="button compact" id="nextPage" type="button">下一页</button>
+      </div>
 
-<div id="toast"></div>
+      <div class="panel" style="margin-top:24px">
+        <div class="panel-head">
+          <div><h2>按模型统计</h2><p class="panel-hint">全部历史累计，不受上方筛选影响；按请求数排序。</p></div>
+          <button class="button compact" id="refreshStats" type="button">刷新统计</button>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>模型</th><th>请求</th><th>成功</th><th>失败</th><th>输入</th><th>输出</th><th>缓存</th><th>平均耗时</th></tr></thead>
+            <tbody id="modelStatsBody"><tr><td colspan="8" class="effort-empty">正在读取统计…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
-<script>/*__AUTH_MODULE__*/</script>
-<script>
-"use strict";
-(() => {
-  const apiMeta = document.querySelector('meta[name="cpa-api-base"]');
-  // The injected auth module already rewrote the meta base with this console's
-  // own reverse-proxy prefix and /v0-vs-/v8 version; read it afterwards.
-  const API = apiMeta.content;
-  // The injected auth module mirrors ClinePassBridge's cpa-auth.js and exposes
-  // individual helpers on window; adapt them to the AUTH facade used below so the
-  // management key is actually attached to (and cleared from) every request.
-  const AUTH = {
-    headers: () => (typeof window.CCBridgeAuthHeaders === "function" ? window.CCBridgeAuthHeaders() : {}),
-    save: (key, type, remember) => { if (typeof window.CCBridgeSaveAuth === "function") window.CCBridgeSaveAuth(key, type, remember); },
-    clear: (rejectedHeaders) => { if (typeof window.CCBridgeClearAuth === "function") window.CCBridgeClearAuth(rejectedHeaders); },
-    remember: () => (typeof window.CCBridgeRememberAuth === "function" ? window.CCBridgeRememberAuth() : false),
-  };
+    <section id="credentialsPanel" role="tabpanel" aria-labelledby="credentialsTab" hidden>
+      <div class="panel credentials-panel">
+        <div class="panel-head">
+          <div>
+            <h2 title="按优先级从高到低排序；停用后不再调度。">凭据管理</h2>
+            <p class="panel-hint">CommandCode API Key；账号邮箱与额度会在查询后自动同步。同一账号的多个 Key 共享套餐。</p>
+          </div>
+          <div class="row-actions"><button class="button compact primary" id="openCredential" type="button">添加凭据</button></div>
+        </div>
+        <div class="toolbar">
+          <input class="control search" id="credentialSearch" type="search" placeholder="搜索凭据名称或 ID" aria-label="搜索凭据">
+          <button class="button compact" id="refreshUsage" type="button">刷新本页额度</button>
+          <span class="count" id="credentialCount"></span>
+        </div>
+        <div id="credentialList"><div class="empty">正在读取凭据…</div></div>
+        <div class="credential-footer">
+          <p class="panel-hint">额度查询会访问 CommandCode 账号接口（约每分钟刷新一次）· 时间为本地时区</p>
+          <div class="pagination" id="credentialPagination" hidden>
+            <button class="button compact" id="credentialPrev" type="button">上一页</button>
+            <span id="credentialPageInfo"></span>
+            <button class="button compact" id="credentialNext" type="button">下一页</button>
+          </div>
+        </div>
+        <p class="inline-state" id="credentialState" role="status"></p>
+      </div>
+    </section>
 
-  // ---- fetch wrapper ----
-  async function api(path, options = {}) {
-    const headers = Object.assign({ "Accept": "application/json" }, AUTH.headers(), options.headers || {});
-    if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
-    const resp = await fetch(API + path, Object.assign({}, options, { headers }));
-    if (resp.status === 401 || resp.status === 403) {
-      AUTH.clear(headers);
-      pauseAuth("管理密钥无效或已过期，请重新输入。");
-      throw new Error("unauthorized");
-    }
-    const text = await resp.text();
-    let data = null;
-    if (text) { try { data = JSON.parse(text); } catch (_) { data = { raw: text }; } }
-    if (!resp.ok) throw new Error((data && (data.error || data.message)) || ("HTTP " + resp.status));
-    return data;
-  }
+    <section id="modelsPanel" role="tabpanel" aria-labelledby="modelsTab" hidden>
+      <div class="config-grid">
+        <div class="panel">
+          <div class="panel-head">
+            <div><h2>模型映射</h2><p class="panel-hint">勾选控制发布；取消勾选后该模型不再出现在 /v1/models 中。</p></div>
+            <div class="row-actions">
+              <button class="button compact" id="refreshModels" type="button">刷新目录</button>
+              <button class="button compact primary" id="savePublication" type="button">保存发布设置</button>
+            </div>
+          </div>
+          <div id="modelList" aria-live="polite"><div class="empty">正在读取模型…</div></div>
+          <p class="inline-state" id="modelState" role="status"></p>
+        </div>
+        <div class="config-side">
+          <div class="panel">
+            <div class="panel-head"><div><h2>目录诊断</h2><p class="panel-hint">刷新目录时被排除的模型与原因。</p></div></div>
+            <div id="modelDiagnostics"><p class="panel-hint">暂无诊断信息。</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-  // ---- 授权与密钥 (mirrors the ClinePassBridge auth panel) ----
-  let authPaused = "";
-  function authState() {
-    if (authPaused) return authPaused;
-    return Object.keys(AUTH.headers()).length ? "已复用本机记住的管理登录。" : "尚未提供管理密钥。";
-  }
-  function openAuthDialog(message) {
-    document.getElementById("loginErr").textContent = message || authPaused || "";
-    document.getElementById("loginRemember").checked = AUTH.remember();
-    document.getElementById("login").classList.remove("hidden");
-    document.getElementById("loginKey").focus();
-  }
-  function closeAuthDialog() {
-    document.getElementById("login").classList.add("hidden");
-    document.getElementById("loginErr").textContent = "";
-  }
-  function pauseAuth(message) {
-    authPaused = message || "";
-    openAuthDialog(authPaused);
-  }
-  document.getElementById("loginBtn").addEventListener("click", () => {
-    const key = document.getElementById("loginKey").value.trim();
-    if (!key) { document.getElementById("loginErr").textContent = "请输入管理密钥"; return; }
-    AUTH.save(key, document.getElementById("loginType").checked ? "x-management-key" : "bearer", document.getElementById("loginRemember").checked);
-    document.getElementById("loginKey").value = "";
-    authPaused = "";
-    closeAuthDialog();
-    loadAll();
-  });
-  document.getElementById("loginClear").addEventListener("click", () => {
-    AUTH.clear();
-    document.getElementById("loginKey").value = "";
-    document.getElementById("loginErr").textContent = "已清除本地的管理密钥。";
-  });
+    <section id="configPanel" role="tabpanel" aria-labelledby="configTab" hidden>
+      <div class="config-grid">
+        <div class="config-side">
+          <div class="panel">
+            <div class="panel-head"><div><h2>上游与目录</h2><p class="panel-hint">仅影响本插件；保存后立即生效并重新发现目录。</p></div></div>
+            <form class="form-stack" id="settingsForm">
+              <div class="field"><label for="cfgBaseUrl">上游 Base URL</label><input class="control mono" id="cfgBaseUrl" autocomplete="off" required></div>
+              <div class="field"><label for="cfgCatalogUrl">目录地址（留空自动推导）</label><input class="control mono" id="cfgCatalogUrl" autocomplete="off"></div>
+              <div class="field-line">
+                <div class="field"><label for="cfgRefreshInterval">目录刷新间隔</label><input class="control" id="cfgRefreshInterval" placeholder="15m0s"></div>
+                <div class="field"><label for="cfgRequestTimeout">请求超时</label><input class="control" id="cfgRequestTimeout" placeholder="5m0s"></div>
+              </div>
+              <div class="field"><label for="cfgMaxResponseBytes">最大响应字节</label><input class="control" id="cfgMaxResponseBytes" type="number" min="1024" step="1024"></div>
+              <label class="switch"><input id="cfgAllowHttp" type="checkbox"><span>允许 http://（仅本地测试）</span></label>
+              <div class="form-foot"><button class="button primary" type="submit">保存设置</button></div>
+            </form>
+            <p class="inline-state" id="settingsState" role="status"></p>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div><h2>客户端模型前缀</h2><p class="panel-hint">对外暴露的模型 ID 形如 <span class="mono">前缀/上游模型</span>。</p></div></div>
+            <label class="switch"><input id="cfgPrefixEnabled" type="checkbox"><span>启用前缀</span></label>
+            <div class="field" style="margin-top:8px"><label for="cfgPrefixValue">前缀值</label><input class="control mono" id="cfgPrefixValue" placeholder="commandcode"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div><h2>协议开关</h2><p class="panel-hint">关闭某协议会从目录中排除对应路由的模型。</p></div></div>
+            <div style="display:grid;gap:6px">
+              <label class="switch"><input id="cfgProtocolChat" type="checkbox"><span>Chat Completions（/v1/chat/completions）</span></label>
+              <label class="switch"><input id="cfgProtocolMessages" type="checkbox"><span>Messages（/v1/messages）</span></label>
+              <label class="switch"><input id="cfgProtocolResponses" type="checkbox"><span>Responses（/v1/responses）</span></label>
+            </div>
+          </div>
+        </div>
+        <div class="config-side">
+          <div class="panel">
+            <div class="panel-head">
+              <div><h2>运行概览</h2><p class="panel-hint">插件状态与最近一次目录发现。</p></div>
+              <button class="button compact" id="refreshCatalog" type="button">刷新目录</button>
+            </div>
+            <div class="config-meta" id="overviewMeta"><div><div class="datum-label">状态</div><div class="datum-value">加载中…</div></div></div>
+            <div id="overviewError"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div><h2>思考强度映射</h2><p class="panel-hint">把客户端声明的 reasoning_effort 改写成上游值；上游填 omit 则移除该字段。</p></div></div>
+            <form class="form-stack" id="reasoningForm">
+              <div class="field"><label for="reasoningModel">模型</label><select class="control" id="reasoningModel"><option value="">默认（所有模型）</option></select></div>
+              <table class="effort-table">
+                <thead><tr><th scope="col">请求传入</th><th scope="col">映射为</th><th scope="col">操作</th></tr></thead>
+                <tbody id="reasoningRows"></tbody>
+              </table>
+              <div class="form-foot">
+                <button class="button compact" id="addReasoningRule" type="button">添加规则</button>
+                <button class="button primary" type="submit">保存映射</button>
+              </div>
+            </form>
+            <p class="inline-state" id="reasoningState" role="status"></p>
+          </div>
+        </div>
+        <div class="panel auth-panel">
+          <div class="panel-head"><div><h2>管理鉴权（兜底）</h2><p class="panel-hint">控制台通过 CPA 管理接口读写配置：优先复用同源 CPA / CPAMP 记住的登录，鉴权失败时再输入当前站点的管理密钥。</p></div></div>
+          <div class="field-line">
+            <span class="version" id="authStateLabel">授权状态检查中…</span>
+            <div class="row-actions">
+              <button class="button compact" id="clearAuth" type="button">清除密钥</button>
+              <button class="button compact primary" id="openAuth" type="button">管理密钥</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
 
-  // ---- helpers ----
-  function el(tag, props, children) {
-    const node = document.createElement(tag);
-    if (props) for (const k in props) {
-      if (k === "class") node.className = props[k];
-      else if (k === "text") node.textContent = props[k];
-      else if (k === "html") node.innerHTML = props[k];
-      else if (k.startsWith("on") && typeof props[k] === "function") node.addEventListener(k.slice(2).toLowerCase(), props[k]);
-      else if (props[k] === false || props[k] === null || props[k] === undefined) { /* skip falsey attributes */ }
-      else if (props[k] === true) node.setAttribute(k, "");
-      else node.setAttribute(k, props[k]);
-    }
-    (children || []).forEach(c => node.appendChild(typeof c === "string" ? document.createTextNode(c) : c));
-    return node;
-  }
-  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
-  function toast(message, kind) {
-    const box = el("div", { class: "toast " + (kind || ""), text: message });
-    document.getElementById("toast").appendChild(box);
-    setTimeout(() => box.remove(), 4200);
-  }
-  function fmtTime(v) {
-    if (!v) return "—";
-    const d = new Date(v);
-    return isNaN(d) ? String(v) : d.toLocaleString();
-  }
-  function fmtDur(ms) {
-    if (!ms) return "—";
-    if (ms < 1000) return ms + " ms";
-    return (ms / 1000).toFixed(2) + " s";
-  }
-  function pct(n) { return Math.max(0, Math.min(100, n || 0)); }
-  async function guard(fn) {
-    try { await fn(); }
-    catch (e) { if (e.message !== "unauthorized") toast(e.message || String(e), "err"); }
-  }
+  <dialog id="authDialog" aria-labelledby="authTitle">
+    <h2 id="authTitle">管理鉴权（兜底）</h2>
+    <p>优先复用同源管理页保存的登录；手动密钥验证成功后保留在本标签页，勾选下方选项可在下次打开时继续使用。</p>
+    <form id="authForm" class="form-stack" autocomplete="off">
+      <div class="field"><label for="authType">请求头</label><select class="control" id="authType"><option value="bearer">Authorization: Bearer</option><option value="x-management-key">X-Management-Key</option></select></div>
+      <div class="field"><label for="authKey">管理密钥</label><input class="control" id="authKey" type="password" autocomplete="new-password" placeholder="当前站点的 CPA 或 CPAMP 管理密钥"></div>
+      <label class="field-line"><input id="rememberAuth" type="checkbox">在此浏览器记住管理密钥</label>
+      <p class="inline-state" id="authState" role="alert" hidden></p>
+      <div class="dialog-actions"><button class="button" id="closeAuth" type="button">取消</button><button class="button primary" id="authSubmit" type="submit">验证并应用</button></div>
+    </form>
+  </dialog>
 
-  // ---- top status ----
-  async function loadStatus() {
-    const badge = document.getElementById("statusBadge");
-    try {
-      const s = await api("/status");
-      const ok = !s.last_refresh_error;
-      badge.className = "badge " + (ok ? "ok" : "err");
-      badge.textContent = ok
-        ? `正常 · ${s.model_count} 个模型`
-        : "目录刷新异常";
-      return s;
-    } catch (e) {
-      badge.className = "badge err";
-      badge.textContent = "不可用";
-      throw e;
-    }
-  }
+  <dialog id="credentialDialog" aria-labelledby="credentialDialogTitle">
+    <h2 id="credentialDialogTitle">添加凭据</h2>
+    <p id="credentialDialogHint">输入名称和 API Key。</p>
+    <form class="form-stack" id="credentialForm" autocomplete="off">
+      <div class="field"><label for="credentialLabel">名称</label><input class="control" id="credentialLabel" maxlength="100" required placeholder="例如：主账号"></div>
+      <div class="field"><label for="credentialKey">API Key</label><input class="control" id="credentialKey" type="password" autocomplete="new-password" placeholder="输入新的 API Key"></div>
+      <div class="field"><label for="credentialPriority">优先级（数字越大越优先，留空不设置）</label><input class="control" id="credentialPriority" type="number" min="0" max="100" step="1"></div>
+      <p class="inline-state" id="credentialDialogState" role="alert"></p>
+      <div class="dialog-actions"><button class="button" id="cancelCredential" type="button">取消</button><button class="button primary" id="saveCredential" type="submit">保存</button></div>
+    </form>
+  </dialog>
 
-  // ---- tabs ----
-  const TABS = [
-    ["overview", "概览"], ["credentials", "凭据"], ["models", "模型"],
-    ["quota", "额度"], ["logs", "日志"], ["stats", "统计"], ["settings", "设置"],
-  ];
-  let activeTab = "overview";
-  function buildTabs() {
-    const nav = document.getElementById("tabs");
-    clear(nav);
-    TABS.forEach(([id, label]) => {
-      nav.appendChild(el("button", {
-        class: activeTab === id ? "active" : "",
-        onClick: () => switchTab(id),
-      }, [label]));
-    });
-  }
-  function switchTab(id) {
-    activeTab = id;
-    buildTabs();
-    TABS.forEach(([t]) => document.getElementById("tab-" + t).classList.toggle("hidden", t !== id));
-    RENDER[id] && RENDER[id]();
-  }
+  <dialog id="modelTestDialog" class="dialog-wide" aria-labelledby="modelTestTitle">
+    <h2 id="modelTestTitle">测试模型</h2>
+    <p class="mono" id="modelTestTarget"></p>
+    <form class="form-stack" id="modelTestForm" autocomplete="off">
+      <div class="field"><label for="modelTestCredential">凭据（会消耗少量额度）</label><select class="control" id="modelTestCredential"><option value="">自动选择（第一把可用凭据）</option></select></div>
+      <div class="field"><label for="modelTestPrompt">提示词</label><input class="control" id="modelTestPrompt" value="你好，请用一句话回复。"></div>
+      <label class="switch"><input id="modelTestStream" type="checkbox"><span>流式测试（验证流式链路与首字耗时）</span></label>
+      <div class="model-test-result" id="modelTestResult" hidden></div>
+      <div class="dialog-actions"><button class="button" id="closeModelTest" type="button">关闭</button><button class="button primary" type="submit">开始测试</button></div>
+    </form>
+  </dialog>
 
-  // ---- overview ----
-  function statCard(k, v) {
-    return el("div", { class: "stat" }, [
-      el("div", { class: "k", text: k }),
-      el("div", { class: "v", text: v === undefined || v === null || v === "" ? "—" : String(v) }),
-    ]);
-  }
-  async function renderOverview() {
-    const root = document.getElementById("tab-overview");
-    clear(root);
-    await guard(async () => {
-      const s = await api("/status");
-      const grid = el("div", { class: "grid cols" }, [
-        statCard("插件版本", s.version),
-        statCard("提供商标识", s.provider),
-        statCard("已发布模型", s.model_count),
-        statCard("YAML 静态密钥", s.yaml_key_count),
-        statCard("模型前缀", s.prefix_enabled ? s.prefix_value + "/" : "未启用"),
-        statCard("最近目录刷新", fmtTime(s.last_refresh_at)),
-        statCard("存储目录", s.data_dir || "未配置（重启不保留设置/日志）"),
-        statCard("发布白名单/屏蔽", (s.publication_enabled || 0) + " / " + (s.publication_hidden || 0)),
-      ]);
-      root.appendChild(grid);
-      if (s.last_refresh_error) {
-        root.appendChild(el("div", { class: "card" }, [
-          el("h3", { text: "最近刷新错误" }),
-          el("pre", { class: "err", text: s.last_refresh_error }),
-        ]));
+  <dialog id="confirmDialog" aria-labelledby="confirmTitle" aria-describedby="confirmText">
+    <h2 id="confirmTitle">请确认</h2>
+    <p id="confirmText"></p>
+    <div class="dialog-actions"><button class="button" id="confirmCancel" type="button">取消</button><button class="button danger" id="confirmOk" type="button">确认</button></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script>/*__AUTH_MODULE__*/</script>
+  <script>
+    "use strict";
+    (() => {
+      const $ = (id) => document.getElementById(id);
+      const API_BASE = document.querySelector('meta[name="cpa-api-base"]').content;
+      const PAGE_SIZE = 50;
+      const CREDENTIAL_PAGE_SIZE = 10;
+      const USAGE_TTL_MS = 60 * 1000;
+
+      // The injected auth module mirrors ClinePassBridge's cpa-auth.js and
+      // exposes individual helpers; adapt them to the AUTH facade used below.
+      const AUTH = {
+        headers: () => (typeof window.CCBridgeAuthHeaders === 'function' ? window.CCBridgeAuthHeaders() : {}),
+        save: (key, type, remember) => { if (typeof window.CCBridgeSaveAuth === 'function') window.CCBridgeSaveAuth(key, type, remember); },
+        clear: (rejectedHeaders) => { if (typeof window.CCBridgeClearAuth === 'function') window.CCBridgeClearAuth(rejectedHeaders); },
+        remember: () => (typeof window.CCBridgeRememberAuth === 'function' ? window.CCBridgeRememberAuth() : false),
+      };
+
+      const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+      const present = (value) => value !== null && value !== undefined && String(value).trim() !== '';
+      const shown = (value, fallback = '未记录') => present(value) ? esc(value) : fallback;
+      const number = (value) => Number.isFinite(Number(value)) && present(value) ? Number(value).toLocaleString('zh-CN') : '—';
+      const percent = (value) => value !== null && value !== undefined && Number.isFinite(Number(value)) ? `${Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 1 })}%` : '—';
+
+      // ---- fetch wrapper ----
+      async function api(path, options = {}) {
+        const headers = Object.assign({ Accept: 'application/json' }, AUTH.headers(), options.headers || {});
+        if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+        const resp = await fetch(API_BASE + path, Object.assign({}, options, { headers }));
+        if (resp.status === 401 || resp.status === 403) {
+          AUTH.clear(headers);
+          pauseAuth('管理密钥无效或已过期，请重新输入。');
+          throw new Error('unauthorized');
+        }
+        const text = await resp.text();
+        let data = null;
+        if (text) { try { data = JSON.parse(text); } catch { data = { raw: text }; } }
+        if (!resp.ok) throw new Error((data && (data.error || data.message)) || ('HTTP ' + resp.status));
+        return data;
       }
-      root.appendChild(el("div", { class: "card" }, [
-        el("h3", { text: "快速操作" }),
-        el("div", { class: "row" }, [
-          el("button", { class: "btn primary", onClick: () => guard(async () => {
-            await api("/models/refresh", { method: "POST" });
-            toast("目录已刷新", "ok");
-            renderOverview(); loadStatus();
-          })}, ["刷新模型目录"]),
-          el("button", { class: "btn", onClick: () => switchTab("credentials") }, ["管理凭据"]),
-          el("button", { class: "btn", onClick: () => switchTab("quota") }, ["查看额度"]),
-        ]),
-      ]));
-      root.appendChild(el("div", { class: "card" }, [
-        el("h3", { text: "调用方式" }),
-        el("p", { class: "muted", text: "客户端使用 CPA 的 API 地址与 API Key，model 填已发布的模型 ID（例如 commandcode/deepseek/deepseek-v4.1-flash）。模式与协议由本插件自动转换。" }),
-      ]));
-    });
-  }
-
-  // ---- credentials ----
-  async function renderCredentials() {
-    const root = document.getElementById("tab-credentials");
-    clear(root);
-    await guard(async () => {
-      const data = await api("/credentials");
-      root.appendChild(credForm());
-      const items = data.items || [];
-      if (!items.length) {
-        root.appendChild(el("div", { class: "card empty", text: "还没有 CommandCode 凭据。在上方添加一个 API Key 即可。" }));
-        return;
+      function bail(error) {
+        if (error && error.message === 'unauthorized') return;
+        toast(error && error.message ? error.message : String(error));
       }
-      const wrap = el("div", { class: "table-wrap" });
-      const table = el("table");
-      table.appendChild(el("thead", null, [el("tr", null, [
-        el("th", { text: "标签" }), el("th", { text: "账号" }), el("th", { text: "密钥" }),
-        el("th", { text: "状态" }), el("th", { text: "优先级" }), el("th", { text: "操作" }),
-      ])]));
-      const tbody = el("tbody");
-      items.forEach(c => {
-        const enabled = c.enabled !== false;
-        tbody.appendChild(el("tr", null, [
-          el("td", null, [el("div", { text: c.label || c.id }), el("div", { class: "tiny mono", text: c.id })]),
-          el("td", { text: c.email || "—" }),
-          el("td", { class: "mono", text: c.key_masked || (c.has_key ? "已设置" : "未知") }),
-          el("td", null, [el("span", { class: "pill " + (enabled ? "ok" : "warn"), text: enabled ? "已启用" : "已停用" }),
-                          c.status ? el("span", { class: "tiny", text: " " + c.status }) : null]),
-          el("td", { text: c.priority || 0 }),
-          el("td", null, [el("div", { class: "row" }, [
-            el("button", { class: "btn small", onClick: () => guard(async () => {
-              await api("/credentials", { method: "PUT", body: JSON.stringify({ id: c.id, disabled: enabled }) });
-              toast(enabled ? "已停用" : "已启用", "ok"); renderCredentials();
-            })}, [enabled ? "停用" : "启用"]),
-            el("button", { class: "btn small", onClick: () => editCredential(c) }, ["编辑"]),
-            el("button", { class: "btn small danger", onClick: () => guard(async () => {
-              if (!confirm("确定删除该凭据？（会删除对应的 auth 文件）")) return;
-              await api("/credentials?id=" + encodeURIComponent(c.id), { method: "DELETE" });
-              toast("已删除", "ok"); renderCredentials();
-            })}, ["删除"]),
-          ])]),
-        ]));
+      async function guard(fn) { try { await fn(); } catch (error) { bail(error); } }
+
+      // ---- toast & global notice ----
+      let toastTimer = 0;
+      function toast(message) {
+        const box = $('toast');
+        box.textContent = message;
+        box.hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { box.hidden = true; }, 4000);
+      }
+      function globalError(message) { $('globalError').textContent = message; $('globalError').hidden = !message; }
+
+      // ---- management auth ----
+      function authSummary() {
+        return Object.keys(AUTH.headers()).length ? '已复用本机记住的管理登录。' : '尚未提供管理密钥。';
+      }
+      function renderAuthState() { $('authStateLabel').textContent = authSummary(); }
+      function openAuthDialog(message) {
+        $('authState').textContent = message || '';
+        $('authState').hidden = !message;
+        $('authType').value = 'bearer';
+        $('rememberAuth').checked = AUTH.remember();
+        $('authDialog').showModal();
+        $('authKey').focus();
+      }
+      function pauseAuth(message) { openAuthDialog(message || '管理密钥无效或已过期，请重新输入。'); }
+      $('openAuth').addEventListener('click', () => openAuthDialog(''));
+      $('closeAuth').addEventListener('click', () => $('authDialog').close());
+      $('authForm').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const key = $('authKey').value.trim();
+        if (!key) { $('authState').textContent = '请输入管理密钥'; $('authState').hidden = false; return; }
+        AUTH.save(key, $('authType').value, $('rememberAuth').checked);
+        $('authKey').value = '';
+        $('authDialog').close();
+        globalError('');
+        renderAuthState();
+        loadAll();
       });
-      table.appendChild(tbody);
-      wrap.appendChild(table);
-      root.appendChild(wrap);
-    });
-  }
-  function credForm() {
-    const label = el("input", { placeholder: "备注，如 主账号" });
-    const key = el("input", { placeholder: "CommandCode API Key", type: "password", autocomplete: "off" });
-    const card = el("div", { class: "card" }, [
-      el("h3", { text: "添加凭据" }),
-      el("p", { class: "tiny", text: "CommandCode 使用 API Key 接入，无交互式 OAuth：填入 Key 即可。账号邮箱会在查询额度时自动同步。" }),
-      el("div", { class: "row", style: "align-items:flex-end" }, [
-        el("label", { class: "field", style: "flex:1;min-width:180px" }, [el("span", { text: "标签" }), label]),
-        el("label", { class: "field", style: "flex:2;min-width:240px" }, [el("span", { text: "API Key" }), key]),
-        el("button", { class: "btn primary", onClick: () => guard(async () => {
-          if (!key.value.trim()) { toast("请填写 API Key", "err"); return; }
-          await api("/credentials", { method: "POST", body: JSON.stringify({ label: label.value.trim(), api_key: key.value.trim() }) });
-          toast("凭据已添加", "ok"); renderCredentials(); loadStatus();
-        })}, ["添加"]),
-      ]),
-    ]);
-    return card;
-  }
-  function editCredential(c) {
-    const label = el("input", { value: c.label || "" });
-    const key = el("input", { placeholder: "留空则不修改", type: "password", autocomplete: "off" });
-    const priority = el("input", { type: "number", value: c.priority || 0 });
-    const overlay = el("div", { class: "overlay" }, [
-      el("div", { class: "box" }, [
-        el("h2", { text: "编辑凭据" }),
-        el("div", { class: "stack" }, [
-          el("label", { class: "field" }, [el("span", { text: "标签" }), label]),
-          el("label", { class: "field" }, [el("span", { text: "API Key（留空不变）" }), key]),
-          el("label", { class: "field" }, [el("span", { text: "优先级（越大越优先）" }), priority]),
-        ]),
-        el("div", { class: "row end", style: "margin-top:16px" }, [
-          el("button", { class: "btn", onClick: () => overlay.remove() }, ["取消"]),
-          el("button", { class: "btn primary", onClick: () => guard(async () => {
-            const body = { id: c.id, label: label.value, priority: Number(priority.value) || 0 };
-            if (key.value.trim()) body.api_key = key.value.trim();
-            await api("/credentials", { method: "PUT", body: JSON.stringify(body) });
-            overlay.remove(); toast("已保存", "ok"); renderCredentials();
-          })}, ["保存"]),
-        ]),
-      ]),
-    ]);
-    document.body.appendChild(overlay);
-  }
-
-  // ---- models ----
-  async function renderModels() {
-    const root = document.getElementById("tab-models");
-    clear(root);
-    await guard(async () => {
-      const data = await api("/models");
-      const head = el("div", { class: "card" }, [
-        el("div", { class: "row between" }, [
-          el("div", null, [
-            el("h3", { text: "模型目录" }),
-            el("div", { class: "tiny", text: `客户端前缀：${data.prefix_enabled ? "已启用" : "未启用"} · 共 ${(data.models || []).length} 个模型` }),
-          ]),
-          el("div", { class: "row" }, [
-            el("button", { class: "btn", onClick: () => guard(async () => {
-              await api("/models/refresh", { method: "POST" }); toast("已刷新", "ok"); renderModels();
-            })}, ["刷新目录"]),
-            el("button", { class: "btn primary", onClick: () => savePublication(data.models || []) }, ["保存发布设置"]),
-          ]),
-        ]),
-      ]);
-      root.appendChild(head);
-
-      if ((data.warnings || []).length) {
-        root.appendChild(el("details", { class: "collapse" }, [
-          el("summary", { text: `目录诊断（${data.warnings.length} 条警告 / ${(data.unsupported || []).length} 个被排除）` }),
-          el("div", { class: "body" }, (data.warnings || []).map(w => el("div", { class: "tiny mono", text: w }))
-            .concat((data.unsupported || []).map(u => el("div", { class: "tiny mono", text: `× ${u.upstream_id}: ${u.reason}` })))),
-        ]));
-      }
-
-      const models = data.models || [];
-      if (!models.length) {
-        root.appendChild(el("div", { class: "card empty", text: "目录为空。请先添加凭据，然后点击“刷新目录”。" }));
-        return;
-      }
-      const wrap = el("div", { class: "table-wrap" });
-      const table = el("table");
-      table.appendChild(el("thead", null, [el("tr", null, [
-        el("th", { text: "发布" }), el("th", { text: "客户端模型 ID" }), el("th", { text: "上游 ID" }),
-        el("th", { text: "协议" }), el("th", { text: "上下文" }), el("th", { text: "思考" }), el("th", { text: "操作" }),
-      ])]));
-      const tbody = el("tbody");
-      models.forEach(m => {
-        const cb = el("input", { type: "checkbox" });
-        cb.checked = m.published !== false;
-        cb.dataset.upstream = m.upstream_id;
-        tbody.appendChild(el("tr", null, [
-          el("td", null, [cb]),
-          el("td", { class: "mono", text: m.public_id }),
-          el("td", { class: "mono", text: m.upstream_id }),
-          el("td", null, [el("span", { class: "pill", text: m.protocol })]),
-          el("td", { text: m.context_length ? String(m.context_length) : "—" }),
-          el("td", null, [el("span", { class: "pill " + (m.thinking ? "ok" : ""), text: m.thinking ? "支持" : "—" })]),
-          el("td", null, [el("button", { class: "btn small", onClick: () => openModelTest(m) }, ["测试"])]),
-        ]));
+      $('clearAuth').addEventListener('click', () => {
+        AUTH.clear();
+        renderAuthState();
+        toast('已清除本地的管理密钥。');
       });
-      table.appendChild(tbody);
-      wrap.appendChild(table);
-      root.appendChild(wrap);
-    });
-  }
-  function savePublication(models) {
-    return guard(async () => {
-      const disabled = [];
-      document.querySelectorAll('#tab-models input[type=checkbox]').forEach(cb => {
-        if (!cb.checked) disabled.push(cb.dataset.upstream);
-      });
-      await api("/models/publication", { method: "PUT", body: JSON.stringify({ enabled_models: [], disabled_models: disabled }) });
-      toast("发布设置已保存", "ok"); renderModels();
-    });
-  }
 
-  function formatTestResult(r) {
-    const lines = [];
-    lines.push(`结果：${r.ok ? "成功" : "失败"}`);
-    if (r.status) lines.push(`HTTP：${r.status}`);
-    if (r.protocol) lines.push(`协议：${r.protocol}`);
-    if (r.credential_id) lines.push(`凭据：${r.credential_id}`);
-    if (r.latency_ms !== undefined && r.latency_ms !== null) lines.push(`总耗时：${fmtDur(r.latency_ms)}`);
-    if (r.first_byte_ms) lines.push(`首字：${fmtDur(r.first_byte_ms)}`);
-    if (r.usage) lines.push(`tokens：入 ${r.usage.input_tokens || 0} / 出 ${r.usage.output_tokens || 0} / 缓存 ${r.usage.cached_tokens || 0}`);
-    if (r.error) lines.push(`错误：${r.error}`);
-    if (r.reply) lines.push("--- 回复 ---\n" + r.reply);
-    return lines.join("\n");
-  }
-
-  function openModelTest(m) {
-    const credSel = el("select");
-    const prompt = el("input", { value: "你好，请用一句话回复。", style: "min-width:260px" });
-    const streamCb = el("input", { type: "checkbox" });
-    const result = el("pre", { class: "mono", style: "white-space:pre-wrap;max-height:260px;overflow:auto;margin-top:12px;background:var(--panel-2);padding:10px;border-radius:8px", text: "尚未测试。" });
-    const overlay = el("div", { class: "overlay" }, [
-      el("div", { class: "box", style: "max-width:600px" }, [
-        el("h2", { text: "测试模型" }),
-        el("div", { class: "tiny mono", style: "margin-bottom:10px", text: m.public_id + "  →  " + m.upstream_id }),
-        el("div", { class: "stack" }, [
-          el("label", { class: "field" }, [el("span", { text: "凭据（测试会消耗少量额度）" }), credSel]),
-          el("label", { class: "field" }, [el("span", { text: "提示词" }), prompt]),
-          el("label", { class: "check" }, [streamCb, el("span", { text: "流式测试（验证流式链路与首字耗时）" })]),
-        ]),
-        result,
-        el("div", { class: "row end", style: "margin-top:14px" }, [
-          el("button", { class: "btn", onClick: () => overlay.remove() }, ["关闭"]),
-          el("button", { class: "btn primary", onClick: () => guard(async () => {
-            result.textContent = "请求中…";
-            const body = { model: m.public_id, prompt: prompt.value, stream: streamCb.checked, credential_id: credSel.value };
-            const r = await api("/models/test", { method: "POST", body: JSON.stringify(body) });
-            result.textContent = formatTestResult(r);
-            if (!r.ok) toast(r.error || "测试失败", "err");
-          })}, ["开始测试"]),
-        ]),
-      ]),
-    ]);
-    document.body.appendChild(overlay);
-    credSel.appendChild(el("option", { value: "", text: "自动选择（第一把可用凭据）" }));
-    api("/credentials").then(d => {
-      (d.items || []).forEach(c => credSel.appendChild(el("option", {
-        value: c.id, text: (c.label || c.id) + (c.enabled === false ? "（已停用）" : ""),
-      })));
-    }).catch(() => {});
-  }
-
-  // ---- quota ----
-  function windowRow(title, win) {
-    const row = el("div", { class: "win" });
-    row.appendChild(el("div", { class: "row" }, [
-      el("span", { text: title }),
-      el("span", { class: "tiny", text: win ? `${win.used} / ${win.cap}${win.resets_at ? " · 重置 " + fmtTime(win.resets_at) : ""}` : "—" }),
-    ]));
-    if (win) {
-      row.appendChild(el("div", { class: "bar " + (win.status === "exceeded" ? "exceeded" : "") }, [
-        el("i", { style: "width:" + pct(win.percent) + "%" }),
-      ]));
-    }
-    return row;
-  }
-  async function renderQuota() {
-    const root = document.getElementById("tab-quota");
-    clear(root);
-    await guard(async () => {
-      const list = await api("/quota-usage", { method: "POST", body: "{}" });
-      const cards = list.cards || [];
-      if (!cards.length) {
-        root.appendChild(el("div", { class: "card empty", text: "还没有凭据，无法查询额度。" }));
-        return;
+      // ---- confirm dialog ----
+      let confirmHandler = null;
+      function confirmAction(message, onConfirm, label) {
+        $('confirmText').textContent = message;
+        $('confirmOk').textContent = label || '确认';
+        confirmHandler = onConfirm;
+        $('confirmDialog').showModal();
       }
-      const grid = el("div", { class: "grid", style: "grid-template-columns:repeat(auto-fill,minmax(320px,1fr))" });
-      cards.forEach(card => {
-        const usageBox = el("div", { class: "body" });
-        const cardEl = el("div", { class: "cred-card" }, [
-          el("div", { class: "head" }, [
-            el("div", null, [
-              el("div", { text: card.label || card.key_id }),
-              el("div", { class: "tiny mono", text: card.key_id }),
-            ]),
-            el("button", { class: "btn small", onClick: () => guard(async () => {
-              const r = await api("/quota-usage", { method: "POST", body: JSON.stringify({ key_id: card.key_id }) });
-              renderQuotaCard(usageBox, r);
-              if (r.error) toast(r.error, "err");
-            })}, ["刷新"]),
-          ]),
-          usageBox,
-        ]);
-        if (card.email) renderQuotaCard(usageBox, { usage: null, email: card.email, label: card.label });
-        else usageBox.appendChild(el("div", { class: "tiny", text: "点击刷新查询额度。" }));
-        grid.appendChild(cardEl);
-        if (card.email) {
-          // auto-refresh once for cards already linked to an account
-          api("/quota-usage", { method: "POST", body: JSON.stringify({ key_id: card.key_id }) })
-            .then(r => renderQuotaCard(usageBox, r)).catch(() => {});
+      $('confirmCancel').addEventListener('click', () => $('confirmDialog').close());
+      $('confirmOk').addEventListener('click', () => {
+        const run = confirmHandler;
+        confirmHandler = null;
+        $('confirmDialog').close();
+        if (run) guard(run);
+      });
+
+      // ---- formatting ----
+      function formatTime(value) {
+        if (!present(value)) return '—';
+        const date = new Date(value);
+        return Number.isFinite(date.getTime())
+          ? date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+          : String(value);
+      }
+      function formatLogDuration(value) {
+        if (!present(value) || !Number.isFinite(Number(value)) || Number(value) <= 0) return '—';
+        const n = Number(value);
+        if (n < 1000) return `${n} ms`;
+        if (n < 60000) return `${(n / 1000).toFixed(2)}s`;
+        const seconds = Math.round(n / 1000);
+        return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+      }
+      function latencyTone(value, kind, completionTokens) {
+        if (!present(value) || !Number.isFinite(Number(value)) || Number(value) <= 0) return '';
+        const seconds = Number(value) / 1000;
+        if (kind === 'ttft') return seconds < 5 ? 'good' : seconds < 10 ? 'warn' : 'bad';
+        if (Number(completionTokens) >= 100) {
+          const throughput = Number(completionTokens) / seconds;
+          return throughput >= 30 ? 'good' : throughput >= 15 ? 'warn' : 'bad';
+        }
+        return seconds < 10 ? 'good' : seconds < 30 ? 'warn' : 'bad';
+      }
+      function latencyLine(label, value, kind, completionTokens) {
+        const known = present(value) && Number.isFinite(Number(value)) && Number(value) > 0;
+        return `<div class="latency-line ${known ? latencyTone(value, kind, completionTokens) : ''}"><span>${label}</span><strong>${known ? formatLogDuration(value) : '—'}</strong></div>`;
+      }
+      function statusInfo(raw) {
+        const value = String(raw ?? '').toLowerCase();
+        if (/^2\d\d$/.test(value)) return { label: `HTTP ${esc(raw)}`, cls: 'good' };
+        if (/^[45]\d\d$/.test(value)) return { label: `HTTP ${esc(raw)}`, cls: 'bad' };
+        if (value === 'success' || value === 'ok') return { label: '成功', cls: 'good' };
+        if (value === 'error' || value === 'failed') return { label: '失败', cls: 'bad' };
+        return { label: shown(raw, '未知'), cls: 'warn' };
+      }
+
+      // ---- tabs ----
+      const TABS = ['logs', 'credentials', 'models', 'config'];
+      let activeTab = 'logs';
+      function setTab(name) {
+        activeTab = name;
+        for (const id of TABS) {
+          const button = $(id + 'Tab'), panel = $(id + 'Panel');
+          if (button) button.setAttribute('aria-selected', String(id === name));
+          if (panel) panel.hidden = id !== name;
+        }
+        if (name === 'logs') { loadLogs(true); loadStatistics(); }
+        if (name === 'credentials') loadCredentials();
+        if (name === 'models') loadModels();
+        if (name === 'config') loadConfig();
+      }
+      for (const id of TABS) $(id + 'Tab').addEventListener('click', () => setTab(id));
+
+      // ---- request logs ----
+      const logs = { page: 0, total: 0 };
+      function renderLogSummary(summary) {
+        $('statRequests').textContent = number(summary.requests ?? 0);
+        $('statTotalTokens').textContent = number((summary.input_tokens || 0) + (summary.output_tokens || 0));
+        $('statInputTokens').textContent = number(summary.input_tokens || 0);
+        $('statOutputTokens').textContent = number(summary.output_tokens || 0);
+        $('statCachedTokens').textContent = number(summary.cached_tokens || 0);
+        $('statCacheRate').textContent = (summary.input_tokens || 0) > 0 ? percent((summary.cache_rate || 0) * 100) : '—';
+        $('statAvgDuration').textContent = formatLogDuration(summary.avg_duration_ms);
+      }
+      function datum(label, value, fallback = '未记录') {
+        return `<div><div class="datum-label">${label}</div><div class="datum-value">${shown(value, fallback)}</div></div>`;
+      }
+      function logMarkup(log) {
+        const status = statusInfo(log.status);
+        const usageTitle = '输入 / 输出 tokens；缓存已含在输入中。';
+        return `<details class="log-entry" data-id="${esc(log.id)}"><summary class="row-main">
+          <div class="cell"><span class="cell-label">时间</span><div class="primary-text mono">${formatTime(log.time)}</div></div>
+          <div class="cell log-model"><span class="cell-label">客户端模型 / 上游</span><div class="primary-text mono" title="${esc(log.model || '')}">${shown(log.model)}</div><div class="subtext mono" title="${esc(log.upstream_model || '')}">${shown(log.upstream_model)}</div></div>
+          <div class="cell"><span class="cell-label">格式</span><span class="badge">${shown(log.source_format, '?')}</span><div class="subtext">${log.stream === true ? '流式' : '非流式'}</div></div>
+          <div class="cell"><span class="cell-label">结果</span><span class="badge ${status.cls}">${status.label}</span></div>
+          <div class="cell"><span class="cell-label">凭据</span><div class="primary-text truncate" title="${esc(log.auth_id || '—')}">${shown(log.auth_id, '—')}</div></div>
+          <div class="cell"><span class="cell-label">首字 / 耗时</span><div class="log-latency">${latencyLine('首字', log.first_byte_ms, 'ttft', log.output_tokens)}${latencyLine('耗时', log.duration_ms, 'duration', log.output_tokens)}</div></div>
+          <div class="cell"><span class="cell-label">用量</span><div class="log-usage" title="${esc(usageTitle)}"><span>${number(log.input_tokens || 0)}</span><span>/ ${number(log.output_tokens || 0)}</span></div><div class="subtext log-usage"><span>缓存 ${number(log.cached_tokens || 0)}</span></div></div>
+          <span class="chevron" aria-hidden="true">›</span></summary>
+          <div class="detail">
+            <div class="detail-head"><strong>请求详情</strong></div>
+            <div class="detail-grid">
+              ${datum('请求 ID', log.id, '—')}
+              ${datum('客户端模型', log.model)}
+              ${datum('上游模型', log.upstream_model)}
+              ${datum('来源格式', log.source_format, '—')}
+              ${datum('模式', log.stream === true ? '流式' : '非流式')}
+              ${datum('凭据', log.auth_id, '—')}
+              ${datum('HTTP 状态', log.status, '—')}
+              ${datum('首字时间', formatLogDuration(log.first_byte_ms), '—')}
+              ${datum('总耗时', formatLogDuration(log.duration_ms), '—')}
+              ${datum('输入 tokens', number(log.input_tokens || 0))}
+              ${datum('输出 tokens', number(log.output_tokens || 0))}
+              ${datum('缓存 tokens', number(log.cached_tokens || 0))}
+            </div>
+            ${present(log.error) ? `<div style="margin-top:14px"><div class="datum-label">请求错误</div><div class="error-text">${esc(log.error)}</div></div>` : ''}
+          </div></details>`;
+      }
+      function renderLogList(items) {
+        $('logList').innerHTML = items.length
+          ? items.map(logMarkup).join('')
+          : '<div class="empty"><strong>暂无请求日志</strong>有请求经过本插件后会显示在这里。</div>';
+      }
+      function renderLogPager(total) {
+        const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+        $('pageInfo').textContent = `第 ${Math.min(logs.page + 1, pages)} / ${pages} 页`;
+        $('prevPage').disabled = logs.page <= 0;
+        $('nextPage').disabled = (logs.page + 1) * PAGE_SIZE >= total;
+      }
+      async function loadLogs(reset) {
+        if (reset) logs.page = 0;
+        const query = new URLSearchParams({
+          limit: PAGE_SIZE,
+          offset: logs.page * PAGE_SIZE,
+          search: $('logSearch').value.trim(),
+          status: $('statusFilter').value,
+        });
+        const data = await api('/logs?' + query.toString());
+        logs.total = data.total || 0;
+        $('logCount').textContent = `${number(logs.total)} 条`;
+        renderLogSummary(data.summary || {});
+        renderLogList(data.items || []);
+        renderLogPager(logs.total);
+      }
+      async function loadStatistics() {
+        const data = await api('/statistics');
+        const models = data.models || [];
+        $('modelStatsBody').innerHTML = models.length
+          ? models.map((m) => `<tr><td class="mono">${esc(m.model)}</td><td class="num">${number(m.requests)}</td><td class="num">${number(m.success)}</td><td class="num">${number(m.failed)}</td><td class="num">${number(m.input_tokens)}</td><td class="num">${number(m.output_tokens)}</td><td class="num">${number(m.cached_tokens)}</td><td class="num">${formatLogDuration(m.avg_duration_ms)}</td></tr>`).join('')
+          : '<tr><td colspan="8" class="effort-empty">暂无统计数据。</td></tr>';
+      }
+      $('refreshLogs').addEventListener('click', () => guard(async () => { await loadLogs(false); await loadStatistics(); }));
+      $('refreshStats').addEventListener('click', () => guard(loadStatistics));
+      $('prevPage').addEventListener('click', () => guard(() => { logs.page = Math.max(0, logs.page - 1); return loadLogs(false); }));
+      $('nextPage').addEventListener('click', () => guard(() => { logs.page += 1; return loadLogs(false); }));
+      let logSearchTimer = 0;
+      $('logSearch').addEventListener('input', () => { clearTimeout(logSearchTimer); logSearchTimer = setTimeout(() => guard(() => loadLogs(true)), 300); });
+      $('statusFilter').addEventListener('change', () => guard(() => loadLogs(true)));
+      $('clearLogs').addEventListener('click', () => confirmAction('清空全部请求日志与统计？此操作不可恢复。', async () => {
+        await api('/logs/reset', { method: 'POST' });
+        toast('已清空日志与统计');
+        await loadLogs(true); await loadStatistics();
+      }, '清空'));
+
+      // ---- credentials & quota ----
+      const credentialView = { items: [], page: 0, visible: [], usage: new Map(), loading: new Set(), paused: false };
+      function usageDate(value) {
+        const date = new Date(value);
+        return present(value) && Number.isFinite(date.getTime())
+          ? date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+          : '';
+      }
+      function usageMeter(label, window) {
+        const value = window && Number.isFinite(Number(window.percent)) && Number(window.percent) >= 0 ? Number(window.percent) : null;
+        const tone = value === null ? '' : value >= 90 ? 'bad' : value >= 70 ? 'warn' : 'good';
+        const reset = window ? usageDate(window.resets_at) : '';
+        const text = value === null ? '—' : `${value.toLocaleString('zh-CN')}%`;
+        const detail = window ? `已用 ${window.used} / ${window.cap}${window.status === 'unlimited' ? ' · 未限额' : ''}` : '';
+        return `<div class="usage-meter ${tone}"><div class="usage-meter-head"><span>${esc(label)}</span><strong>${text}</strong></div><div class="usage-track" ${value === null ? 'aria-hidden="true"' : `role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, value)}"`}><span class="usage-fill" style="width:${value === null ? 0 : Math.min(100, value)}%"></span></div><div class="usage-reset" title="${esc(detail)}">${reset ? esc(reset) + ' 重置' : '重置时间 —'}</div></div>`;
+      }
+      function usageHTML(item) {
+        const entry = credentialView.usage.get(item.id);
+        if (!entry) return '<div class="usage-status" role="status">等待查询额度…</div>';
+        if (entry.error) return `<div class="usage-status stale" role="status">${esc(entry.error)}</div>`;
+        const usage = entry.usage;
+        if (!usage) return '<div class="usage-status" role="status">暂无额度数据。</div>';
+        const meters = [
+          usageMeter('5 小时', usage.five_hour),
+          usageMeter('每周', usage.weekly),
+          usage.month ? usageMeter('月度', usage.month) : '',
+        ].filter(Boolean).join('');
+        return `<div class="usage-meters">${meters}</div>`;
+      }
+      function usageStatusHTML(item) {
+        const entry = credentialView.usage.get(item.id);
+        const loading = credentialView.loading.has(item.id);
+        if (loading) return '<div class="usage-status" role="status">正在更新…</div>';
+        if (entry && entry.error) return `<div class="usage-status stale" role="status">${esc(entry.error)}</div>`;
+        if (entry && entry.usage && entry.usage.refreshed_at) return `<div class="usage-status" role="status">更新于 ${esc(usageDate(entry.usage.refreshed_at))}</div>`;
+        return '<div class="usage-status" role="status">等待查询</div>';
+      }
+      function usagePlanHTML(item) {
+        const entry = credentialView.usage.get(item.id);
+        const usage = entry && entry.usage;
+        if (!usage) return '套餐信息待查询';
+        const plan = usage.plan || '套餐未知';
+        const left = present(usage.credits_left) ? ` · 剩余 ${usage.credits_left} credits` : '';
+        return `${esc(plan)}${esc(left)}`;
+      }
+      function credentialCard(item) {
+        const enabled = item.enabled !== false;
+        return `<div class="credential-row" data-id="${esc(item.id)}">
+          <div class="credential-main">
+            <div class="credential-title">
+              <span class="primary-text" title="${esc(item.label)}">${shown(item.email || item.label, '未命名')}</span>
+              <span class="badge ${enabled ? 'good' : 'warn'}">${enabled ? '已启用' : '已停用'}</span>
+            </div>
+            <div class="subtext mono credential-id" title="${esc(item.id)}">${esc(item.id)}</div>
+            <div class="subtext"><span class="mono">${shown(item.key_masked, item.has_key ? '已设置' : '未知')}</span></div>
+            ${Number(item.priority) ? `<div class="subtext"><span class="badge">优先级 ${esc(item.priority)}</span></div>` : ''}
+            <div class="credential-status">${usageStatusHTML(item)}</div>
+          </div>
+          <div class="credential-usage">${usageHTML(item)}</div>
+          <div class="credential-bottom">
+            <div class="credential-plan">${usagePlanHTML(item)}</div>
+            <div class="row-actions">
+              <label class="credential-toggle" title="启用 / 停用此凭据"><input type="checkbox" data-toggle="1" ${enabled ? 'checked' : ''}><span class="toggle-track"></span><span>${enabled ? '已启用' : '已停用'}</span></label>
+              <button class="button compact" data-refresh="1" type="button" ${credentialView.loading.has(item.id) ? 'disabled' : ''}>${credentialView.loading.has(item.id) ? '更新中…' : '刷新'}</button>
+              <button class="button compact" data-edit="1" type="button">编辑</button>
+              <button class="button compact danger" data-remove="1" type="button">删除</button>
+            </div>
+          </div>
+        </div>`;
+      }
+      function renderCredentials(focusId) {
+        if (focusId) {
+          $('credentialSearch').value = '';
+          credentialView.page = Math.floor(Math.max(0, credentialView.items.findIndex((item) => item.id === focusId)) / CREDENTIAL_PAGE_SIZE);
+        }
+        const query = $('credentialSearch').value.trim().toLocaleLowerCase();
+        const filtered = credentialView.items.filter((item) => `${item.label} ${item.email || ''} ${item.id}`.toLocaleLowerCase().includes(query));
+        const pages = Math.max(1, Math.ceil(filtered.length / CREDENTIAL_PAGE_SIZE));
+        credentialView.page = Math.min(credentialView.page, pages - 1);
+        credentialView.visible = filtered.slice(credentialView.page * CREDENTIAL_PAGE_SIZE, (credentialView.page + 1) * CREDENTIAL_PAGE_SIZE);
+        $('credentialList').innerHTML = credentialView.visible.length
+          ? credentialView.visible.map(credentialCard).join('')
+          : `<div class="empty"><strong>${query ? '没有匹配的凭据' : '尚未添加凭据'}</strong>${query ? '换个关键词试试。' : '点击右上角「添加凭据」填入 CommandCode API Key。'}</div>`;
+        $('credentialCount').textContent = query ? `${filtered.length} / ${credentialView.items.length} 个凭据` : `${filtered.length} 个凭据`;
+        $('credentialPagination').hidden = pages <= 1;
+        $('credentialPageInfo').textContent = `${credentialView.page + 1} / ${pages} 页`;
+        $('credentialPrev').disabled = credentialView.page === 0;
+        $('credentialNext').disabled = credentialView.page + 1 >= pages;
+        $('refreshUsage').disabled = !credentialView.visible.length;
+        for (const item of credentialView.visible) queueUsage(item.id);
+      }
+      function updateUsageRow(id) {
+        const item = credentialView.items.find((entry) => entry.id === id);
+        const row = [...$('credentialList').children].find((node) => node.dataset && node.dataset.id === id);
+        if (!item || !row) return;
+        const usage = row.querySelector('.credential-usage');
+        const status = row.querySelector('.credential-status');
+        const plan = row.querySelector('.credential-plan');
+        const button = row.querySelector('[data-refresh]');
+        if (usage) usage.innerHTML = usageHTML(item);
+        if (status) status.innerHTML = usageStatusHTML(item);
+        if (plan) plan.innerHTML = usagePlanHTML(item);
+        if (button) {
+          const loading = credentialView.loading.has(id);
+          button.disabled = loading;
+          button.textContent = loading ? '更新中…' : '刷新';
+        }
+      }
+      async function refreshUsage(id, force) {
+        const entry = credentialView.usage.get(id);
+        if (!force && entry && Date.now() - entry.checked_at < USAGE_TTL_MS) { updateUsageRow(id); return; }
+        if (credentialView.loading.has(id)) return;
+        credentialView.loading.add(id);
+        updateUsageRow(id);
+        try {
+          const data = await api('/quota-usage', { method: 'POST', body: JSON.stringify({ key_id: id }) });
+          credentialView.usage.set(id, Object.assign({ checked_at: Date.now() }, data));
+          if (data.email) {
+            const item = credentialView.items.find((entry2) => entry2.id === id);
+            if (item) item.email = data.email;
+          }
+        } catch (error) {
+          if (error.message !== 'unauthorized') credentialView.usage.set(id, { error: error.message, checked_at: Date.now() });
+        } finally {
+          credentialView.loading.delete(id);
+          updateUsageRow(id);
+        }
+      }
+      const usageQueue = new Map();
+      function queueUsage(id, force) {
+        if (!credentialView.visible.some((item) => item.id === id)) return;
+        usageQueue.set(id, force || usageQueue.get(id) || false);
+        pumpUsage();
+      }
+      function pumpUsage() {
+        while (usageQueue.size) {
+          const [id, force] = usageQueue.entries().next().value;
+          usageQueue.delete(id);
+          if (credentialView.loading.has(id)) continue;
+          void refreshUsage(id, force);
+        }
+      }
+      $('credentialList').addEventListener('click', (event) => {
+        const row = event.target.closest('.credential-row');
+        if (!row) return;
+        const id = row.dataset.id;
+        if (event.target.closest('[data-refresh]')) { queueUsage(id, true); return; }
+        if (event.target.closest('[data-edit]')) { openCredentialDialog(id); return; }
+        if (event.target.closest('[data-remove]')) {
+          const item = credentialView.items.find((entry) => entry.id === id) || { id };
+          confirmAction(`删除凭据「${item.label || item.id}」？对应的 auth 文件会被移除。`, async () => {
+            await api('/credentials?id=' + encodeURIComponent(id), { method: 'DELETE' });
+            toast('已删除凭据');
+            await loadCredentials();
+          }, '删除');
         }
       });
-      root.appendChild(grid);
-    });
-  }
-  function renderQuotaCard(box, data) {
-    clear(box);
-    if (data.error) { box.appendChild(el("div", { class: "tiny", style: "color:var(--danger)", text: data.error })); return; }
-    const u = data.usage;
-    if (!u) { box.appendChild(el("div", { class: "tiny", text: "暂无额度数据。" })); return; }
-    box.appendChild(el("div", { class: "row between" }, [
-      el("span", { class: "pill ok", text: u.plan || "套餐未知" }),
-      el("span", { class: "tiny", text: "剩余 " + (u.credits_left ?? "?") + " credits" }),
-    ]));
-    box.appendChild(windowRow("5 小时窗口", u.five_hour));
-    box.appendChild(windowRow("每周窗口", u.weekly));
-    if (u.month) box.appendChild(windowRow("月度额度", u.month));
-    box.appendChild(el("div", { class: "tiny", style: "margin-top:8px", text: "刷新于 " + fmtTime(u.refreshed_at) }));
-  }
-
-  // ---- logs ----
-  let logState = { search: "", status: "all", offset: 0, limit: 50 };
-  async function renderLogs(reset) {
-    const root = document.getElementById("tab-logs");
-    clear(root);
-    if (reset) logState.offset = 0;
-    await guard(async () => {
-      const q = new URLSearchParams({ limit: logState.limit, offset: logState.offset, search: logState.search, status: logState.status });
-      const data = await api("/logs?" + q.toString());
-      const summary = data.summary || {};
-      root.appendChild(el("div", { class: "grid cols" }, [
-        statCard("请求数", summary.requests),
-        statCard("成功 / 失败", (summary.success || 0) + " / " + (summary.failed || 0)),
-        statCard("输入 / 输出 tokens", (summary.input_tokens || 0) + " / " + (summary.output_tokens || 0)),
-        statCard("缓存命中率", summary.cache_rate ? (summary.cache_rate * 100).toFixed(1) + "%" : "—"),
-        statCard("平均耗时", fmtDur(summary.avg_duration_ms)),
-      ]));
-      const search = el("input", { placeholder: "搜索模型 / 错误 / 账号", value: logState.search });
-      const statusSel = el("select", null, [
-        el("option", { value: "all", text: "全部" }),
-        el("option", { value: "success", text: "成功" }),
-        el("option", { value: "error", text: "失败" }),
-      ]);
-      statusSel.value = logState.status;
-      root.appendChild(el("div", { class: "card" }, [
-        el("div", { class: "row between" }, [
-          el("div", { class: "row" }, [
-            search,
-            statusSel,
-            el("button", { class: "btn", onClick: () => { logState.search = search.value.trim(); logState.status = statusSel.value; renderLogs(true); } }, ["筛选"]),
-          ]),
-          el("button", { class: "btn danger", onClick: () => guard(async () => {
-            if (!confirm("清空全部请求日志？")) return;
-            await api("/logs/reset", { method: "POST" }); toast("已清空", "ok"); renderLogs(true);
-          })}, ["清空日志"]),
-        ]),
-      ]));
-      const items = data.items || [];
-      if (!items.length) {
-        root.appendChild(el("div", { class: "card empty", text: "暂无请求日志。" }));
-        return;
-      }
-      const wrap = el("div", { class: "table-wrap" });
-      const table = el("table");
-      table.appendChild(el("thead", null, [el("tr", null, [
-        el("th", { text: "时间" }), el("th", { text: "模型" }), el("th", { text: "格式" }),
-        el("th", { text: "状态" }), el("th", { text: "耗时" }), el("th", { text: "首字" }),
-        el("th", { text: "Tokens(入/出)" }), el("th", { text: "错误" }),
-      ])]));
-      const tbody = el("tbody");
-      items.forEach(v => {
-        tbody.appendChild(el("tr", null, [
-          el("td", { class: "tiny", text: fmtTime(v.time) }),
-          el("td", null, [el("div", { class: "mono", text: v.model || v.upstream_model || "—" }),
-                          v.upstream_model && v.upstream_model !== v.model ? el("div", { class: "tiny mono", text: v.upstream_model }) : null]),
-          el("td", null, [el("span", { class: "pill", text: (v.source_format || "?") + (v.stream ? " · 流" : "") })]),
-          el("td", null, [el("span", { class: "pill " + (v.status >= 400 || !v.status ? "err" : "ok"), text: v.status || "—" })]),
-          el("td", { text: fmtDur(v.duration_ms) }),
-          el("td", { text: v.first_byte_ms ? fmtDur(v.first_byte_ms) : "—" }),
-          el("td", { text: (v.input_tokens || 0) + " / " + (v.output_tokens || 0) }),
-          el("td", null, [v.error ? el("span", { class: "tiny", style: "color:var(--danger)", text: v.error }) : el("span", { class: "tiny muted", text: "—" })]),
-        ]));
+      $('credentialList').addEventListener('change', (event) => {
+        const toggle = event.target.closest('[data-toggle]');
+        if (!toggle) return;
+        const row = toggle.closest('.credential-row');
+        guard(async () => {
+          await api('/credentials', { method: 'PUT', body: JSON.stringify({ id: row.dataset.id, disabled: !toggle.checked }) });
+          toast(toggle.checked ? '已启用' : '已停用');
+          await loadCredentials();
+        });
       });
-      table.appendChild(tbody);
-      wrap.appendChild(table);
-      root.appendChild(wrap);
-      const total = data.total || 0;
-      root.appendChild(el("div", { class: "pager" }, [
-        el("span", { class: "tiny", text: `共 ${total} 条` }),
-        el("button", { class: "btn small", disabled: logState.offset <= 0, onClick: () => { logState.offset = Math.max(0, logState.offset - logState.limit); renderLogs(); } }, ["上一页"]),
-        el("button", { class: "btn small", disabled: logState.offset + logState.limit >= total, onClick: () => { logState.offset += logState.limit; renderLogs(); } }, ["下一页"]),
-      ]));
-    });
-  }
+      let credSearchTimer = 0;
+      $('credentialSearch').addEventListener('input', () => { clearTimeout(credSearchTimer); credSearchTimer = setTimeout(() => renderCredentials(), 200); });
+      $('credentialPrev').addEventListener('click', () => { credentialView.page = Math.max(0, credentialView.page - 1); renderCredentials(); });
+      $('credentialNext').addEventListener('click', () => { credentialView.page += 1; renderCredentials(); });
+      $('refreshUsage').addEventListener('click', () => { for (const item of credentialView.visible) queueUsage(item.id, true); });
+      async function loadCredentials(focusId) {
+        const data = await api('/credentials');
+        credentialView.items = (data.items || []).slice();
+        const ids = new Set(credentialView.items.map((item) => item.id));
+        for (const id of credentialView.usage.keys()) if (!ids.has(id)) credentialView.usage.delete(id);
+        renderCredentials(focusId);
+      }
 
-  // ---- stats ----
-  async function renderStats() {
-    const root = document.getElementById("tab-stats");
-    clear(root);
-    await guard(async () => {
-      const data = await api("/statistics");
-      const s = data.summary || {};
-      root.appendChild(el("div", { class: "grid cols" }, [
-        statCard("总请求", s.requests),
-        statCard("成功", s.success),
-        statCard("失败", s.failed),
-        statCard("输入 tokens", s.input_tokens),
-        statCard("输出 tokens", s.output_tokens),
-        statCard("缓存 tokens", s.cached_tokens),
-      ]));
-      const models = data.models || [];
-      if (!models.length) { root.appendChild(el("div", { class: "card empty", text: "暂无统计数据。" })); return; }
-      const wrap = el("div", { class: "table-wrap" });
-      const table = el("table");
-      table.appendChild(el("thead", null, [el("tr", null, [
-        el("th", { text: "模型" }), el("th", { text: "请求" }), el("th", { text: "成功" }),
-        el("th", { text: "失败" }), el("th", { text: "输入" }), el("th", { text: "输出" }),
-        el("th", { text: "缓存" }), el("th", { text: "平均耗时" }),
-      ])]));
-      const tbody = el("tbody");
-      models.forEach(m => tbody.appendChild(el("tr", null, [
-        el("td", { class: "mono", text: m.model }),
-        el("td", { text: m.requests }),
-        el("td", { text: m.success }),
-        el("td", { text: m.failed }),
-        el("td", { text: m.input_tokens }),
-        el("td", { text: m.output_tokens }),
-        el("td", { text: m.cached_tokens }),
-        el("td", { text: fmtDur(m.avg_duration_ms) }),
-      ])));
-      table.appendChild(tbody);
-      wrap.appendChild(table);
-      root.appendChild(wrap);
-    });
-  }
+      // ---- credential dialog ----
+      let editingCredentialId = '';
+      function openCredentialDialog(id) {
+        editingCredentialId = id || '';
+        const item = credentialView.items.find((entry) => entry.id === id);
+        $('credentialDialogTitle').textContent = id ? '编辑凭据' : '添加凭据';
+        $('credentialDialogHint').textContent = id ? '留空的字段保持原值；API Key 留空表示不修改。' : '输入名称和 API Key。';
+        $('credentialLabel').value = item ? (item.label || '') : '';
+        $('credentialKey').value = '';
+        $('credentialKey').placeholder = id ? '留空则不修改' : 'CommandCode API Key';
+        $('credentialPriority').value = item && Number(item.priority) ? String(item.priority) : '';
+        $('credentialDialogState').textContent = '';
+        $('credentialDialogState').hidden = true;
+        $('credentialDialog').showModal();
+        $('credentialLabel').focus();
+      }
+      $('openCredential').addEventListener('click', () => openCredentialDialog(''));
+      $('cancelCredential').addEventListener('click', () => $('credentialDialog').close());
+      $('credentialForm').addEventListener('submit', (event) => {
+        event.preventDefault();
+        guard(async () => {
+          const label = $('credentialLabel').value.trim();
+          const key = $('credentialKey').value.trim();
+          const state = $('credentialDialogState');
+          if (!editingCredentialId && !key) { state.textContent = '请填写 API Key'; state.hidden = false; return; }
+          const body = { id: editingCredentialId, label };
+          if (key) body.api_key = key;
+          if ($('credentialPriority').value !== '') body.priority = Number($('credentialPriority').value) || 0;
+          await api('/credentials', { method: editingCredentialId ? 'PUT' : 'POST', body: JSON.stringify(body) });
+          $('credentialDialog').close();
+          toast(editingCredentialId ? '凭据已更新' : '凭据已添加');
+          const focus = editingCredentialId;
+          editingCredentialId = '';
+          await loadCredentials(focus);
+          loadOverview();
+        });
+      });
 
-  // ---- settings ----
-  async function renderSettings() {
-    const root = document.getElementById("tab-settings");
-    clear(root);
-    await guard(async () => {
-      const c = await api("/config");
-      const f = {};
-      f.base_url = el("input", { value: c.base_url || "", style: "min-width:320px" });
-      f.catalog_url = el("input", { value: c.catalog_url || "", style: "min-width:320px" });
-      f.prefix_enabled = el("input", { type: "checkbox" }); f.prefix_enabled.checked = !!c.model_prefix?.enabled;
-      f.prefix_value = el("input", { value: c.model_prefix?.value || "commandcode" });
-      f.chat = el("input", { type: "checkbox" }); f.chat.checked = !!c.protocols?.chat_completions;
-      f.messages = el("input", { type: "checkbox" }); f.messages.checked = !!c.protocols?.messages;
-      f.responses = el("input", { type: "checkbox" }); f.responses.checked = !!c.protocols?.responses;
-      f.allow_http = el("input", { type: "checkbox" }); f.allow_http.checked = !!c.allow_http;
-      f.request_timeout = el("input", { value: c.request_timeout || "5m0s" });
-      f.refresh_interval = el("input", { value: c.refresh_interval || "15m0s" });
-      f.max_response_bytes = el("input", { type: "number", value: c.max_response_bytes || 67108864 });
+      // ---- models ----
+      function renderModels(data) {
+        const models = data.models || [];
+        $('modelList').innerHTML = models.length
+          ? models.map((m) => `<div class="model-row" data-upstream="${esc(m.upstream_id)}">
+              <label class="model-publish" title="控制是否发布该模型"><input type="checkbox" data-publish ${m.published !== false ? 'checked' : ''}><span>发布</span></label>
+              <div class="model-main">
+                <div class="primary-text mono">${esc(m.public_id)}</div>
+                <div class="subtext mono">${esc(m.upstream_id)}</div>
+                <div class="tagline">
+                  <span class="badge">${shown(m.protocol, '?')}</span>
+                  ${m.context_length ? `<span class="badge">上下文 ${number(m.context_length)}</span>` : ''}
+                  ${m.output_limit ? `<span class="badge">输出 ${number(m.output_limit)}</span>` : ''}
+                  ${m.thinking ? '<span class="badge good">思考</span>' : ''}
+                  <span class="badge ${m.published !== false ? 'good' : 'warn'}">${m.published !== false ? '已发布' : '未发布'}</span>
+                </div>
+              </div>
+              <div class="row-actions"><button class="button compact" data-test="1" type="button">测试</button></div>
+            </div>`).join('')
+          : '<div class="empty"><strong>目录为空</strong>请先添加凭据，然后点击「刷新目录」。</div>';
+        const warnings = data.warnings || [], unsupported = data.unsupported || [];
+        $('modelDiagnostics').innerHTML = (warnings.length || unsupported.length)
+          ? `<div style="display:grid;gap:6px">${warnings.map((w) => `<div class="mono subtext">${esc(w)}</div>`).join('')}${unsupported.map((u) => `<div class="mono subtext">× ${esc(u.upstream_id)}：${esc(u.reason)}</div>`).join('')}</div>`
+          : '<p class="panel-hint">暂无诊断信息。</p>';
+      }
+      async function loadModels() {
+        const data = await api('/models');
+        renderModels(data);
+      }
+      $('refreshModels').addEventListener('click', () => guard(async () => {
+        $('modelState').textContent = '正在刷新目录…';
+        const data = await api('/models/refresh', { method: 'POST' });
+        renderModels(data);
+        $('modelState').textContent = '';
+        toast('目录已刷新');
+      }));
+      $('refreshCatalog').addEventListener('click', () => guard(async () => {
+        await api('/models/refresh', { method: 'POST' });
+        toast('目录已刷新');
+        await loadOverview();
+      }));
+      $('savePublication').addEventListener('click', () => guard(async () => {
+        const disabled = [];
+        $('modelList').querySelectorAll('[data-publish]').forEach((box) => { if (!box.checked) disabled.push(box.closest('.model-row').dataset.upstream); });
+        const data = await api('/models/publication', { method: 'PUT', body: JSON.stringify({ enabled_models: [], disabled_models: disabled }) });
+        renderModels(data);
+        toast('发布设置已保存');
+      }));
+      $('modelList').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-test]');
+        if (!button) return;
+        const row = button.closest('.model-row');
+        openModelTest(row.dataset.upstream);
+      });
 
-      root.appendChild(el("div", { class: "card" }, [
-        el("h3", { text: "上游与目录" }),
-        el("div", { class: "grid cols" }, [
-          el("label", { class: "field" }, [el("span", { text: "Base URL" }), f.base_url]),
-          el("label", { class: "field" }, [el("span", { text: "Catalog URL（留空自动）" }), f.catalog_url]),
-          el("label", { class: "field" }, [el("span", { text: "目录刷新间隔" }), f.refresh_interval]),
-          el("label", { class: "field" }, [el("span", { text: "请求超时" }), f.request_timeout]),
-          el("label", { class: "field" }, [el("span", { text: "最大响应字节" }), f.max_response_bytes]),
-        ]),
-        el("label", { class: "check", style: "margin-top:12px" }, [f.allow_http, el("span", { text: "允许 http://（仅本地测试）" })]),
-      ]));
-      root.appendChild(el("div", { class: "card" }, [
-        el("h3", { text: "客户端模型前缀" }),
-        el("div", { class: "row" }, [
-          el("label", { class: "check" }, [f.prefix_enabled, el("span", { text: "启用前缀" })]),
-          el("label", { class: "field" }, [el("span", { text: "前缀值" }), f.prefix_value]),
-        ]),
-      ]));
-      root.appendChild(el("div", { class: "card" }, [
-        el("h3", { text: "协议开关" }),
-        el("div", { class: "row" }, [
-          el("label", { class: "check" }, [f.chat, el("span", { text: "Chat Completions" })]),
-          el("label", { class: "check" }, [f.messages, el("span", { text: "Messages" })]),
-          el("label", { class: "check" }, [f.responses, el("span", { text: "Responses" })]),
-        ]),
-        el("p", { class: "tiny", text: "CommandCode 的 OSS 模型默认走 chat-completions；关闭某协议会从目录中排除对应路由的模型。" }),
-      ]));
-      try { root.appendChild(await reasoningSection()); } catch (_) {}
-      const authStateEl = el("span", { class: "tiny", text: authState() });
-      root.appendChild(el("div", { class: "card" }, [
-        el("h3", { text: "授权与密钥" }),
-        el("p", { class: "tiny", text: "控制台通过 CPA 管理接口读写配置：先复用同源 CPA / CPAMP 记住的登录，授权失败时再输入当前站点的管理密钥。" }),
-        el("div", { class: "row between" }, [
-          authStateEl,
-          el("div", { class: "row" }, [
-            el("button", { class: "btn", onClick: () => { AUTH.clear(); authStateEl.textContent = authState(); toast("已清除本地管理密钥", "ok"); } }, ["清除密钥"]),
-            el("button", { class: "btn primary", onClick: () => openAuthDialog("") }, ["管理密钥"]),
-          ]),
-        ]),
-      ]));
-      root.appendChild(el("div", { class: "row end" }, [
-        el("button", { class: "btn primary", onClick: () => guard(async () => {
+      // ---- model test ----
+      function openModelTest(upstreamId) {
+        $('modelTestTarget').textContent = upstreamId;
+        $('modelTestResult').hidden = true;
+        $('modelTestResult').innerHTML = '';
+        $('modelTestPrompt').value = '你好，请用一句话回复。';
+        $('modelTestStream').checked = false;
+        const select = $('modelTestCredential');
+        select.innerHTML = '<option value="">自动选择（第一把可用凭据）</option>';
+        for (const item of credentialView.items) {
+          select.appendChild(new Option((item.label || item.id) + (item.enabled === false ? '（已停用）' : ''), item.id));
+        }
+        $('modelTestDialog').showModal();
+      }
+      $('closeModelTest').addEventListener('click', () => $('modelTestDialog').close());
+      $('modelTestForm').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const box = $('modelTestResult');
+        box.hidden = false;
+        box.innerHTML = '<div class="subtext">请求中…</div>';
+        guard(async () => {
+          let credentialId = $('modelTestCredential').value;
+          if (!credentialId && !credentialView.items.length) {
+            const data = await api('/credentials');
+            credentialView.items = (data.items || []).slice();
+            for (const item of credentialView.items) if (item.enabled !== false) { credentialId = item.id; break; }
+          }
+          const body = { model: $('modelTestTarget').textContent, prompt: $('modelTestPrompt').value, stream: $('modelTestStream').checked, credential_id: credentialId };
+          const r = await api('/models/test', { method: 'POST', body: JSON.stringify(body) });
+          box.innerHTML = modelTestResult(r);
+        });
+      });
+      function modelTestResult(r) {
+        const parts = [];
+        parts.push(`<div class="model-test-meta"><span class="badge ${r.ok ? 'good' : 'bad'}">${r.ok ? '成功' : '失败'}</span>${r.status ? `<span>HTTP ${esc(r.status)}</span>` : ''}${r.protocol ? `<span>协议 ${esc(r.protocol)}</span>` : ''}${r.credential_id ? `<span>凭据 ${esc(r.credential_id)}</span>` : ''}${present(r.latency_ms) ? `<span>总耗时 ${formatLogDuration(r.latency_ms)}</span>` : ''}${present(r.first_byte_ms) ? `<span>首字 ${formatLogDuration(r.first_byte_ms)}</span>` : ''}${r.usage ? `<span>tokens 入 ${r.usage.input_tokens || 0} / 出 ${r.usage.output_tokens || 0} / 缓存 ${r.usage.cached_tokens || 0}</span>` : ''}</div>`);
+        if (present(r.error)) parts.push(`<div class="error-text">${esc(r.error)}</div>`);
+        if (present(r.reply)) parts.push(`<pre>${esc(r.reply)}</pre>`);
+        return parts.join('');
+      }
+
+      // ---- config ----
+      async function loadOverview() {
+        const status = await api('/status');
+        const meta = [
+          ['插件版本', status.version],
+          ['提供商标识', status.provider],
+          ['已发布模型', status.model_count],
+          ['YAML 静态密钥', status.yaml_key_count],
+          ['客户端前缀', status.prefix_enabled ? `${status.prefix_value}/` : '未启用'],
+          ['发布白名单 / 屏蔽', `${status.publication_enabled || 0} / ${status.publication_hidden || 0}`],
+          ['最近目录刷新', formatTime(status.last_refresh_at)],
+          ['存储目录', status.data_dir || '未配置（重启不保留设置/日志）'],
+        ];
+        $('overviewMeta').innerHTML = meta.map(([label, value]) => `<div><div class="datum-label">${esc(label)}</div><div class="datum-value">${shown(value)}</div></div>`).join('');
+        $('overviewError').innerHTML = status.last_refresh_error ? `<div class="notice error" style="margin-top:14px">${esc(status.last_refresh_error)}</div>` : '';
+        document.title = 'CommandCode 控制台';
+      }
+      function renderReasoning(data) {
+        const levels = data.levels || [];
+        const modelSelect = $('reasoningModel');
+        const current = modelSelect.value;
+        modelSelect.innerHTML = '<option value="">默认（所有模型）</option>';
+        (data.models || []).forEach((id) => modelSelect.appendChild(new Option(id, id)));
+        if (current) modelSelect.value = current;
+        const rows = $('reasoningRows');
+        const rules = (data.rules || []);
+        rows.innerHTML = '';
+        if (!rules.length) { rows.appendChild(reasoningRow({}, levels, data.models || [])); }
+        else rules.forEach((rule) => rows.appendChild(reasoningRow(rule, levels, data.models || [])));
+      }
+      function reasoningRow(rule, levels, models) {
+        const tr = document.createElement('tr');
+        const modelCell = document.createElement('td');
+        const modelSelect = document.createElement('select');
+        modelSelect.className = 'control';
+        modelSelect.appendChild(new Option('默认（所有模型）', ''));
+        models.forEach((id) => modelSelect.appendChild(new Option(id, id)));
+        if (rule.model && !models.includes(rule.model)) modelSelect.appendChild(new Option(rule.model, rule.model));
+        modelSelect.value = rule.model || '';
+        modelCell.appendChild(modelSelect);
+        const fromCell = document.createElement('td');
+        const fromInput = document.createElement('input');
+        fromInput.className = 'control'; fromInput.value = rule.from || ''; fromInput.setAttribute('list', 'cc-effort');
+        fromCell.appendChild(fromInput);
+        const toCell = document.createElement('td');
+        const toInput = document.createElement('input');
+        toInput.className = 'control'; toInput.value = rule.to || ''; toInput.setAttribute('list', 'cc-effort');
+        toCell.appendChild(toInput);
+        const actionCell = document.createElement('td');
+        const remove = document.createElement('button');
+        remove.className = 'button compact danger'; remove.type = 'button'; remove.textContent = '删除';
+        remove.addEventListener('click', () => tr.remove());
+        actionCell.appendChild(remove);
+        tr.append(modelCell, fromCell, toCell, actionCell);
+        return tr;
+      }
+      $('addReasoningRule').addEventListener('click', () => {
+        const models = [...$('reasoningModel').options].map((option) => option.value).filter(Boolean);
+        const levels = [...document.querySelectorAll('#cc-effort option')].map((option) => option.value);
+        $('reasoningRows').appendChild(reasoningRow($('reasoningModel').value ? { model: $('reasoningModel').value } : {}, levels, models));
+      });
+      async function loadConfig() {
+        const [config, status, reasoning] = await Promise.all([api('/config'), api('/status'), api('/reasoning')]);
+        $('cfgBaseUrl').value = config.base_url || '';
+        $('cfgCatalogUrl').value = config.catalog_url || '';
+        $('cfgRefreshInterval').value = config.refresh_interval || '';
+        $('cfgRequestTimeout').value = config.request_timeout || '';
+        $('cfgMaxResponseBytes').value = config.max_response_bytes || '';
+        $('cfgAllowHttp').checked = !!config.allow_http;
+        $('cfgPrefixEnabled').checked = !!(config.model_prefix && config.model_prefix.enabled);
+        $('cfgPrefixValue').value = (config.model_prefix && config.model_prefix.value) || 'commandcode';
+        const protocols = config.protocols || {};
+        $('cfgProtocolChat').checked = !!protocols.chat_completions;
+        $('cfgProtocolMessages').checked = !!protocols.messages;
+        $('cfgProtocolResponses').checked = !!protocols.responses;
+        const meta = [
+          ['插件版本', status.version],
+          ['提供商标识', status.provider],
+          ['已发布模型', status.model_count],
+          ['YAML 静态密钥', status.yaml_key_count],
+          ['客户端前缀', status.prefix_enabled ? `${status.prefix_value}/` : '未启用'],
+          ['发布白名单 / 屏蔽', `${status.publication_enabled || 0} / ${status.publication_hidden || 0}`],
+          ['最近目录刷新', formatTime(status.last_refresh_at)],
+          ['存储目录', status.data_dir || '未配置（重启不保留设置/日志）'],
+        ];
+        $('overviewMeta').innerHTML = meta.map(([label, value]) => `<div><div class="datum-label">${esc(label)}</div><div class="datum-value">${shown(value)}</div></div>`).join('');
+        $('overviewError').innerHTML = status.last_refresh_error ? `<div class="notice error" style="margin-top:14px">${esc(status.last_refresh_error)}</div>` : '';
+        if (!$('cc-effort')) {
+          const datalist = document.createElement('datalist');
+          datalist.id = 'cc-effort';
+          (reasoning.levels || []).forEach((value) => datalist.appendChild(new Option(value, value)));
+          document.body.appendChild(datalist);
+        }
+        renderReasoning(reasoning);
+        renderAuthState();
+      }
+      $('settingsForm').addEventListener('submit', (event) => {
+        event.preventDefault();
+        guard(async () => {
           const body = {
-            base_url: f.base_url.value.trim(),
-            catalog_url: f.catalog_url.value.trim() || null,
-            model_prefix: { enabled: f.prefix_enabled.checked, value: f.prefix_value.value.trim() || "commandcode" },
-            protocols: { chat_completions: f.chat.checked, messages: f.messages.checked, responses: f.responses.checked },
-            allow_http: f.allow_http.checked,
-            request_timeout: f.request_timeout.value.trim(),
-            refresh_interval: f.refresh_interval.value.trim(),
-            max_response_bytes: Number(f.max_response_bytes.value) || 67108864,
+            base_url: $('cfgBaseUrl').value.trim(),
+            catalog_url: $('cfgCatalogUrl').value.trim() || null,
+            model_prefix: { enabled: $('cfgPrefixEnabled').checked, value: $('cfgPrefixValue').value.trim() || 'commandcode' },
+            protocols: { chat_completions: $('cfgProtocolChat').checked, messages: $('cfgProtocolMessages').checked, responses: $('cfgProtocolResponses').checked },
+            allow_http: $('cfgAllowHttp').checked,
+            request_timeout: $('cfgRequestTimeout').value.trim(),
+            refresh_interval: $('cfgRefreshInterval').value.trim(),
+            max_response_bytes: Number($('cfgMaxResponseBytes').value) || 67108864,
           };
-          const r = await api("/config", { method: "PUT", body: JSON.stringify(body) });
-          toast(r.message || "已保存", "ok"); renderSettings(); loadStatus();
-        })}, ["保存设置"]),
-      ]));
-      root.appendChild(el("p", { class: "tiny", text: "页面设置与请求日志保存在：" + (c.data_dir || "插件默认目录") }));
-    });
-  }
-
-  // ---- reasoning effort mapping editor ----
-  async function reasoningSection() {
-    const data = await api("/reasoning");
-    const levels = data.levels || [];
-    const models = data.models || [];
-    const rows = el("tbody");
-    const makeRow = (rule) => {
-      const modelSel = el("select");
-      modelSel.appendChild(el("option", { value: "", text: "默认（所有模型）" }));
-      models.forEach(id => {
-        const o = el("option", { value: id, text: id });
-        if (rule.model === id) o.selected = true;
-        modelSel.appendChild(o);
+          const r = await api('/config', { method: 'PUT', body: JSON.stringify(body) });
+          $('settingsState').textContent = r.message || '设置已保存';
+          toast(r.message || '设置已保存');
+          await loadConfig();
+        });
       });
-      if (rule.model && !models.includes(rule.model)) {
-        const o = el("option", { value: rule.model, text: rule.model });
-        o.selected = true;
-        modelSel.appendChild(o);
-      }
-      const fromInput = el("input", { value: rule.from || "", list: "cc-effort", style: "width:130px" });
-      const toInput = el("input", { value: rule.to || "", list: "cc-effort", style: "width:130px" });
-      const tr = el("tr", null, [
-        el("td", null, [modelSel]),
-        el("td", null, [fromInput]),
-        el("td", null, [toInput]),
-        el("td", null, [el("button", { class: "btn small danger", onClick: () => tr.remove() }, ["删除"])]),
-      ]);
-      return tr;
-    };
-    (data.rules || []).forEach(r => rows.appendChild(makeRow(r)));
-    const table = el("table", null, [
-      el("thead", null, [el("tr", null, [
-        el("th", { text: "模型" }), el("th", { text: "客户端强度" }), el("th", { text: "上游强度" }), el("th", { text: "" }),
-      ])]),
-      rows,
-    ]);
-    return el("div", { class: "card" }, [
-      el("h3", { text: "思考强度映射" }),
-      el("datalist", { id: "cc-effort" }, levels.map(v => el("option", { value: v }))),
-      el("p", { class: "tiny", text: "把客户端声明的 reasoning_effort 改写成上游值（例如 medium → high）。上游强度填 omit 可移除该字段；模型留空为默认规则，模型专属规则优先。" }),
-      el("div", { class: "table-wrap", style: "margin-top:8px" }, [table]),
-      el("div", { class: "row between", style: "margin-top:10px" }, [
-        el("button", { class: "btn", onClick: () => rows.appendChild(makeRow({})) }, ["添加规则"]),
-        el("button", { class: "btn primary", onClick: () => guard(async () => {
+      $('reasoningForm').addEventListener('submit', (event) => {
+        event.preventDefault();
+        guard(async () => {
           const rules = [];
-          rows.querySelectorAll("tr").forEach(tr => {
-            const sel = tr.querySelector("select");
-            const inputs = tr.querySelectorAll("input");
+          $('reasoningRows').querySelectorAll('tr').forEach((tr) => {
+            const model = tr.querySelector('select').value;
+            const inputs = tr.querySelectorAll('input');
             const from = inputs[0].value.trim();
             const to = inputs[1].value.trim();
-            if (from && to) rules.push({ model: sel.value, from, to });
+            if (from && to) rules.push({ model, from, to });
           });
-          const r = await api("/reasoning", { method: "PUT", body: JSON.stringify({ rules }) });
-          toast(r.message || "已保存", "ok");
-        })}, ["保存映射"]),
-      ]),
-    ]);
-  }
+          const r = await api('/reasoning', { method: 'PUT', body: JSON.stringify({ rules }) });
+          $('reasoningState').textContent = r.message || '思考强度映射已保存';
+          toast(r.message || '映射已保存');
+        });
+      });
 
-  const RENDER = {
-    overview: renderOverview, credentials: renderCredentials, models: renderModels,
-    quota: renderQuota, logs: () => renderLogs(false), stats: renderStats, settings: renderSettings,
-  };
-
-  document.getElementById("reloadBtn").addEventListener("click", () => loadAll());
-
-  function loadAll() {
-    return guard(async () => {
-      await loadStatus();
-      await (RENDER[activeTab] || renderOverview)();
-    });
-  }
-
-  buildTabs();
-  loadAll();
-})();
-</script>
+      // ---- boot ----
+      function loadAll() {
+        return guard(async () => {
+          await loadOverview();
+          if (activeTab === 'logs') { await loadLogs(false); await loadStatistics(); }
+          if (activeTab === 'credentials') await loadCredentials();
+          if (activeTab === 'models') await loadModels();
+          if (activeTab === 'config') await loadConfig();
+        });
+      }
+      $('reloadBtn').addEventListener('click', () => loadAll());
+      renderAuthState();
+      setTab('logs');
+    })();
+  </script>
 </body>
 </html>
