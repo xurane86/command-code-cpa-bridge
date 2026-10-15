@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.2.2
+
+- **修复控制台按钮/标签页无法点击**：`resources/index.html` 的 `el()` 辅助函数在处理 `onClick` 时用 `k.slice(2)` 得到 `"Click"`（首字母大写），而 DOM 事件名区分大小写，`addEventListener("Click", ...)` 永不触发。结果所有用 `onClick` 生成的按钮（标签页切换、概览页「管理凭据/查看额度」等）全部失效，只能停留在默认的概览页。现改为 `k.slice(2).toLowerCase()`。
+
 ## 0.2.1
 
 - **修复控制台管理密钥无法生效**：`resources/index.html` 之前读取 `window.CCBridgeAuth` 对象，但注入的认证模块 `resources/auth.js` 只暴露了 `CCBridgeAuthHeaders / CCBridgeSaveAuth / CCBridgeClearAuth / CCBridgeRememberAuth` 这几个独立函数（与 ClinePassBridge 的 `cpa-auth.js` 同构），导致 `AUTH` 回退为空实现——请求从不携带 `Authorization` 头，保存密钥也无效，从而始终提示「管理密钥无效或已过期」。现改为直接复用这些独立函数。

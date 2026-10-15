@@ -6,7 +6,7 @@
       "name": "CommandCode",
       "description": "将 CommandCode Go/GOAT/Pro/Max 订阅接入 CPA，并提供中文可视化控制台：凭据、模型目录、额度监控、请求日志与设置全部在页面内完成。 / Connect a CommandCode Go/GOAT/Pro/Max plan to CPA with a Chinese management console: credentials, model catalog, quota monitoring, request logs and settings, all in the page.",
       "author": "command-code",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "repository": "https://github.com/xurane86/command-code-cpa-bridge",
       "homepage": "https://github.com/xurane86/command-code-cpa-bridge",
       "license": "MIT",

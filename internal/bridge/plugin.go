@@ -31,7 +31,7 @@ const ProviderID = "commandcode"
 // console URL segment.
 const (
 	pluginName    = "command-code-cpa-bridge"
-	pluginVersion = "0.2.1"
+	pluginVersion = "0.2.2"
 )
 
 // githubRepoURL satisfies the host's validPlugin gate and is the address the

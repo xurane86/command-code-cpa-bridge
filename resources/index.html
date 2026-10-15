@@ -321,7 +321,7 @@ pre.err { background: var(--danger-weak); color: var(--danger); padding: 10px 12
       if (k === "class") node.className = props[k];
       else if (k === "text") node.textContent = props[k];
       else if (k === "html") node.innerHTML = props[k];
-      else if (k.startsWith("on") && typeof props[k] === "function") node.addEventListener(k.slice(2), props[k]);
+      else if (k.startsWith("on") && typeof props[k] === "function") node.addEventListener(k.slice(2).toLowerCase(), props[k]);
       else if (props[k] === false || props[k] === null || props[k] === undefined) { /* skip falsey attributes */ }
       else if (props[k] === true) node.setAttribute(k, "");
       else node.setAttribute(k, props[k]);
