@@ -52,7 +52,7 @@ type resolvedExecution struct {
 // failure envelope.
 func (m *Manager) resolveExecution(req executorRequest) (*resolvedExecution, []byte) {
 	m.mu.RLock()
-	cfg, mgr := m.cfg, m.mgr
+	cfg, mgr, settings := m.cfg, m.mgr, m.settings
 	m.mu.RUnlock()
 	if req.AuthProvider != ProviderID {
 		return nil, classEnvelope(&fault.Error{Class: fault.ClassAuth, Message: "selected auth provider is not commandcode"})
@@ -64,8 +64,14 @@ func (m *Manager) resolveExecution(req executorRequest) (*resolvedExecution, []b
 	}
 	var rec registry.ModelRecord
 	var found bool
-	if mgr != nil && req.Model != "" {
-		rec, found = mgr.Lookup(req.Model)
+	modelName := strings.TrimSpace(req.Model)
+	if mgr != nil && modelName != "" {
+		// Resolve aliases (client name → upstream id). Lookup accepts bare
+		// upstream id and prefixed public id as well.
+		if up := settings.upstreamForAlias(modelName); up != "" {
+			modelName = up
+		}
+		rec, found = mgr.Lookup(modelName)
 	}
 	if !found {
 		return nil, classEnvelope(&fault.Error{

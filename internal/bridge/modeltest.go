@@ -57,11 +57,16 @@ func (m *Manager) modelTest(ctx context.Context, body []byte) pluginapi.Manageme
 	m.mu.RLock()
 	mgr := m.mgr
 	cfg := m.cfg
+	settings := m.settings
 	m.mu.RUnlock()
 	if mgr == nil {
 		return jsonResponse(http.StatusServiceUnavailable, map[string]any{"error": "目录尚未初始化"})
 	}
-	rec, ok := mgr.Lookup(in.Model)
+	modelName := strings.TrimSpace(in.Model)
+	if up := settings.upstreamForAlias(modelName); up != "" {
+		modelName = up
+	}
+	rec, ok := mgr.Lookup(modelName)
 	if !ok {
 		return jsonResponse(http.StatusNotFound, map[string]any{"error": "模型不在可路由目录中：" + in.Model})
 	}

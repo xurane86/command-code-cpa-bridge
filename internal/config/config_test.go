@@ -31,8 +31,8 @@ func TestLoadMinimalAppliesAllDefaults(t *testing.T) {
 	if c.CatalogURL != "https://api.commandcode.ai/provider/v1/models" {
 		t.Errorf("CatalogURL = %q", c.CatalogURL)
 	}
-	if !c.ModelPrefix.Enabled || c.ModelPrefix.Value != "commandcode" {
-		t.Errorf("ModelPrefix = %+v", c.ModelPrefix)
+	if c.ModelPrefix.Enabled || c.ModelPrefix.Value != "commandcode" {
+		t.Errorf("ModelPrefix = %+v, want disabled with default value", c.ModelPrefix)
 	}
 	if len(c.APIKeys) != 1 || c.APIKeys[0].Value != "sk-dummy" {
 		t.Errorf("APIKeys = %+v", c.APIKeys)
@@ -264,8 +264,8 @@ func TestLoadRejections(t *testing.T) {
 			"route-overrides[bad-model].endpoint: must start with /",
 		},
 		{"prefix enabled empty value", "model-prefix:\n  enabled: true\n  value: \"\"\n" + withKey, "model-prefix.value: invalid provider-ID characters"},
-		{"prefix with space", "model-prefix:\n  value: has space\n" + withKey, "model-prefix.value: invalid provider-ID characters"},
-		{"prefix leading dash", "model-prefix:\n  value: -lead\n" + withKey, "model-prefix.value: invalid provider-ID characters"},
+		{"prefix with space", "model-prefix:\n  enabled: true\n  value: has space\n" + withKey, "model-prefix.value: invalid provider-ID characters"},
+		{"prefix leading dash", "model-prefix:\n  enabled: true\n  value: -lead\n" + withKey, "model-prefix.value: invalid provider-ID characters"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

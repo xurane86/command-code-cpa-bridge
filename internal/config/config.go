@@ -200,7 +200,10 @@ func Load(yamlBytes []byte) (Config, error) {
 	c := Config{
 		BaseURL: orDefault(raw.BaseURL, DefaultBaseURL),
 		ModelPrefix: ModelPrefix{
-			Enabled: orDefault(raw.ModelPrefix.Enabled, true),
+			// Default off: the client-facing model id is the upstream id
+			// verbatim, and per-model aliases are edited in the console.
+			// Operators who want a uniform prefix opt in explicitly.
+			Enabled: orDefault(raw.ModelPrefix.Enabled, false),
 			Value:   orDefault(raw.ModelPrefix.Value, DefaultModelPrefix),
 		},
 		APIKeys: keys,

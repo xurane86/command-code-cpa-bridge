@@ -292,8 +292,15 @@ func (m *Manager) modelsResponse() pluginapi.ManagementResponse {
 	unsupported := []map[string]any{}
 	if mgr != nil {
 		for _, rec := range mgr.Models() {
+			alias := settings.aliasFor(rec.UpstreamID)
+			effective := rec.PublicID
+			if alias != "" {
+				effective = alias
+			}
 			models = append(models, map[string]any{
-				"public_id":      rec.PublicID,
+				"public_id":      effective,
+				"default_id":     rec.PublicID,
+				"alias":          alias,
 				"upstream_id":    rec.UpstreamID,
 				"display_name":   rec.DisplayName,
 				"protocol":       string(rec.Protocol),
@@ -314,6 +321,7 @@ func (m *Manager) modelsResponse() pluginapi.ManagementResponse {
 		"unsupported":     unsupported,
 		"enabled_models":  settings.EnabledModels,
 		"disabled_models": settings.DisabledModels,
+		"model_aliases":   settings.ModelAliases,
 		"prefix_enabled":  m.currentConfig().ModelPrefix.Enabled,
 	})
 }
@@ -337,16 +345,24 @@ func (m *Manager) refreshModelsResponse(ctx context.Context) pluginapi.Managemen
 
 func (m *Manager) savePublicationResponse(body []byte) pluginapi.ManagementResponse {
 	var in struct {
-		EnabledModels  []string `json:"enabled_models"`
-		DisabledModels []string `json:"disabled_models"`
+		EnabledModels  []string          `json:"enabled_models"`
+		DisabledModels []string          `json:"disabled_models"`
+		ModelAliases   map[string]string `json:"model_aliases"`
 	}
 	if err := json.Unmarshal(body, &in); err != nil {
 		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "发布配置格式无效"})
+	}
+	aliases, aliasErr := m.validateModelAliases(in.ModelAliases)
+	if aliasErr != "" {
+		return jsonResponse(http.StatusBadRequest, map[string]any{"error": aliasErr})
 	}
 	m.mu.Lock()
 	settings := m.settings
 	settings.EnabledModels = cleanIDs(in.EnabledModels)
 	settings.DisabledModels = cleanIDs(in.DisabledModels)
+	if in.ModelAliases != nil {
+		settings.ModelAliases = aliases
+	}
 	m.settings = settings
 	dataDir := m.cfg.DataDir
 	m.mu.Unlock()
@@ -357,6 +373,52 @@ func (m *Manager) savePublicationResponse(body []byte) pluginapi.ManagementRespo
 	// Nudge the host to re-query model.static so the change is visible.
 	m.nudgeModels()
 	return m.modelsResponse()
+}
+
+// validateModelAliases normalizes the incoming upstream→client-name map and
+// checks it against the live catalog so a saved alias cannot shadow another
+// model's id or an existing alias. A nil input means "leave aliases unchanged".
+func (m *Manager) validateModelAliases(raw map[string]string) (map[string]string, string) {
+	if raw == nil {
+		return nil, ""
+	}
+	m.mu.RLock()
+	mgr := m.mgr
+	m.mu.RUnlock()
+
+	// reserved maps every id a client may already call (upstream id and default
+	// public id) to the model that owns it.
+	reserved := map[string]string{}
+	defaults := map[string]string{}
+	if mgr != nil {
+		for _, rec := range mgr.Models() {
+			reserved[rec.UpstreamID] = rec.UpstreamID
+			reserved[rec.PublicID] = rec.UpstreamID
+			defaults[rec.UpstreamID] = rec.PublicID
+		}
+	}
+	out := map[string]string{}
+	owner := map[string]string{}
+	for up, a := range raw {
+		up = strings.TrimSpace(up)
+		a = strings.TrimSpace(a)
+		if up == "" || a == "" {
+			continue
+		}
+		if a == defaults[up] {
+			// Alias identical to the model's own default id is a no-op.
+			continue
+		}
+		if ownerID, clash := reserved[a]; clash && ownerID != up {
+			return nil, "客户端模型名「" + a + "」与模型「" + ownerID + "」的 ID 冲突，请换一个名字"
+		}
+		if prev, dup := owner[a]; dup && prev != up {
+			return nil, "客户端模型名「" + a + "」被多个模型占用，请改成唯一名字"
+		}
+		owner[a] = up
+		out[up] = a
+	}
+	return out, ""
 }
 
 func cleanIDs(ids []string) []string {

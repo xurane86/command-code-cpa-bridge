@@ -56,7 +56,7 @@
     button:disabled { cursor: not-allowed; opacity: .55; }
     :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     .shell { max-width: 1580px; margin: 0 auto; padding: 16px clamp(16px, 3vw, 40px) 40px; }
-    .topbar, .heading, .section-head, .toolbar, .pagination, .row-main, .detail-head, .field-line, .credential-row, .model-row, .panel-head, .form-foot { display: flex; align-items: center; gap: 12px; }
+    .topbar, .heading, .section-head, .toolbar, .pagination, .row-main, .detail-head, .field-line, .credential-row, .panel-head, .form-foot { display: flex; align-items: center; gap: 12px; }
     .topbar { min-height: 40px; }
     .brand { display: flex; align-items: center; gap: 11px; min-width: 0; font-weight: 700; font-size: 15px; }
     .brandmark { width: 32px; height: 32px; display: block; border-radius: 8px; flex: none; }
@@ -209,14 +209,26 @@
     .credential-toggle:has(input:disabled) { opacity: .55; cursor: not-allowed; }
 
     /* ---- models ---- */
-    #modelList { display: grid; gap: 10px; }
-    .model-row { justify-content: space-between; flex-wrap: wrap; border: 1px solid var(--inset-line); border-radius: 8px; background: var(--inset-bg); padding: 14px; min-width: 0; }
-    .model-row > .model-main { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
-    .tagline { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
-    .model-publish { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: var(--muted); flex: none; }
-    .model-publish input { width: 17px; height: 17px; accent-color: var(--accent); }
-    .model-test-tools { margin: 0 0 14px; display: grid; gap: 6px; }
-    .model-test-tools label { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .model-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .model-toolbar .count { margin-left: auto; }
+    .model-columns { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+    .model-col { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--inset-line); border-radius: 9px; background: var(--inset-bg); overflow: hidden; }
+    .model-col-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 13px; border-bottom: 1px solid var(--inset-line); color: var(--muted); font-size: 12px; font-weight: 700; }
+    .model-scroll { overflow-y: auto; max-height: min(58vh, 600px); }
+    .model-item { display: flex; align-items: center; gap: 10px; padding: 9px 13px; border-bottom: 1px solid color-mix(in srgb, var(--inset-line) 55%, transparent); min-width: 0; cursor: pointer; }
+    .model-item:last-child { border-bottom: 0; }
+    .model-item:hover { background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
+    .model-item.selected { background: color-mix(in srgb, var(--success) 6%, var(--surface)); }
+    .model-item input[type="checkbox"] { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--accent); cursor: pointer; }
+    .model-main { flex: 1; min-width: 0; }
+    .model-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+    .model-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+    .model-item .button { flex: none; }
+    .model-actions { display: flex; flex-direction: column; gap: 6px; flex: none; }
+    .model-alias-field { display: block; margin-top: 6px; }
+    .model-alias-field > .subtext { display: block; margin-bottom: 3px; }
+    .model-alias-field input.model-alias { width: 100%; padding: 5px 8px; font-size: 12px; }
+    .model-empty { padding: 28px 16px; text-align: center; color: var(--muted); font-size: 12px; }
     .model-test-result { min-width: 0; display: grid; gap: 7px; }
     .model-test-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
     .model-test-result pre { margin: 0; padding: 12px; border: 1px solid var(--inset-line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; }
@@ -258,6 +270,7 @@
     @media (max-width: 740px) {
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .model-columns { grid-template-columns: 1fr; }
       .credential-row { grid-template-columns: 1fr; gap: 12px; }
       .usage-meters { gap: 12px; }
     }
@@ -293,7 +306,7 @@
     <div class="tabs" role="tablist" aria-label="管理视图">
       <button class="tab" id="logsTab" role="tab" aria-selected="true" aria-controls="logsPanel" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3h8l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h3Z"/><path d="M15 3v5h5M8 12h8M8 16h5"/></svg><span>请求日志</span></button>
       <button class="tab" id="credentialsTab" role="tab" aria-selected="false" aria-controls="credentialsPanel" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M18 8v6M15 11h6"/></svg><span>凭据管理</span></button>
-      <button class="tab" id="modelsTab" role="tab" aria-selected="false" aria-controls="modelsPanel" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h7v6H3zM14 13h7v6h-7zM10 8h7v5M7 11v5h7"/></svg><span>模型映射</span></button>
+      <button class="tab" id="modelsTab" role="tab" aria-selected="false" aria-controls="modelsPanel" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h7v6H3zM14 13h7v6h-7zM10 8h7v5M7 11v5h7"/></svg><span>模型管理</span></button>
       <button class="tab" id="configTab" role="tab" aria-selected="false" aria-controls="configPanel" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h7m4 0h5M4 17h3m4 0h9"/><circle cx="13" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>配置概览</span></button>
     </div>
 
@@ -371,24 +384,35 @@
     </section>
 
     <section id="modelsPanel" role="tabpanel" aria-labelledby="modelsTab" hidden>
-      <div class="config-grid">
-        <div class="panel">
-          <div class="panel-head">
-            <div><h2>模型映射</h2><p class="panel-hint">勾选控制发布；取消勾选后该模型不再出现在 /v1/models 中。</p></div>
-            <div class="row-actions">
-              <button class="button compact" id="refreshModels" type="button">刷新目录</button>
-              <button class="button compact primary" id="savePublication" type="button">保存发布设置</button>
-            </div>
-          </div>
-          <div id="modelList" aria-live="polite"><div class="empty">正在读取模型…</div></div>
-          <p class="inline-state" id="modelState" role="status"></p>
-        </div>
-        <div class="config-side">
-          <div class="panel">
-            <div class="panel-head"><div><h2>目录诊断</h2><p class="panel-hint">刷新目录时被排除的模型与原因。</p></div></div>
-            <div id="modelDiagnostics"><p class="panel-hint">暂无诊断信息。</p></div>
+      <div class="panel">
+        <div class="panel-head">
+          <div><h2>模型管理</h2><p class="panel-hint">勾选要发布的上游模型；未勾选的不会出现在 /v1/models 中。右侧可逐条编辑「客户端模型名」：默认是上游原名（如 <span class="mono">deepseek/deepseek-v4.1-flash</span>），可改成 <span class="mono">deepseek-v4.1-flash</span> 之类的别名；别名与上游原名都可调用。</p></div>
+          <div class="row-actions">
+            <button class="button compact" id="refreshModels" type="button">刷新目录</button>
+            <button class="button compact primary" id="savePublication" type="button">保存发布设置</button>
           </div>
         </div>
+        <div class="model-toolbar">
+          <input class="control search" id="modelFilter" type="search" placeholder="搜索上游模型" aria-label="搜索上游模型">
+          <button class="button compact" id="selectAllModels" type="button">全选</button>
+          <button class="button compact" id="clearAllModels" type="button">取消全选</button>
+          <span class="count" id="modelCount"></span>
+        </div>
+        <div class="model-columns">
+          <div class="model-col">
+            <div class="model-col-head"><span>上游模型</span><span id="modelAvailCount">—</span></div>
+            <div class="model-scroll" id="modelList" aria-live="polite"><div class="model-empty">正在读取模型…</div></div>
+          </div>
+          <div class="model-col">
+            <div class="model-col-head"><span>已选模型</span><span id="modelSelectedCount">—</span></div>
+            <div class="model-scroll" id="modelSelected" aria-live="polite"><div class="model-empty">尚未选择任何模型。</div></div>
+          </div>
+        </div>
+        <p class="inline-state" id="modelState" role="status"></p>
+      </div>
+      <div class="panel" style="margin-top:24px">
+        <div class="panel-head"><div><h2>目录诊断</h2><p class="panel-hint">刷新目录时被排除的模型与原因。</p></div></div>
+        <div id="modelDiagnostics"><p class="panel-hint">暂无诊断信息。</p></div>
       </div>
     </section>
 
@@ -771,11 +795,21 @@
       }
       function usageMeter(label, window) {
         const value = window && Number.isFinite(Number(window.percent)) && Number(window.percent) >= 0 ? Number(window.percent) : null;
-        const tone = value === null ? '' : value >= 90 ? 'bad' : value >= 70 ? 'warn' : 'good';
+        // Remaining is the headline: percent left and the amount left, so the
+        // operator reads how much headroom is available, not how much was spent.
+        const remainPct = value === null ? null : Math.max(0, 100 - value);
+        const tone = remainPct === null ? '' : remainPct <= 10 ? 'bad' : remainPct <= 30 ? 'warn' : 'good';
         const reset = window ? usageDate(window.resets_at) : '';
-        const text = value === null ? '—' : `${value.toLocaleString('zh-CN')}%`;
-        const detail = window ? `已用 ${window.used} / ${window.cap}${window.status === 'unlimited' ? ' · 未限额' : ''}` : '';
-        return `<div class="usage-meter ${tone}"><div class="usage-meter-head"><span>${esc(label)}</span><strong>${text}</strong></div><div class="usage-track" ${value === null ? 'aria-hidden="true"' : `role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, value)}"`}><span class="usage-fill" style="width:${value === null ? 0 : Math.min(100, value)}%"></span></div><div class="usage-reset" title="${esc(detail)}">${reset ? esc(reset) + ' 重置' : '重置时间 —'}</div></div>`;
+        const text = remainPct === null ? '—' : `${remainPct.toLocaleString('zh-CN')}%`;
+        const cap = window ? Number(window.cap) : NaN;
+        const used = window ? Number(window.used) : NaN;
+        const remain = Number.isFinite(cap) && Number.isFinite(used) ? Math.max(0, cap - used) : null;
+        const amount = window && remain !== null
+          ? `剩余 ${remain.toLocaleString('zh-CN')} / ${cap.toLocaleString('zh-CN')}${window.status === 'unlimited' ? ' · 未限额' : ''}`
+          : (window && window.status === 'unlimited' ? '未限额' : '');
+        const detail = amount || '额度信息暂缺';
+        const resetText = [amount, reset ? esc(reset) + ' 重置' : '重置时间 —'].filter(Boolean).join(' · ');
+        return `<div class="usage-meter ${tone}"><div class="usage-meter-head"><span>${esc(label)} · 剩余</span><strong>${text}</strong></div><div class="usage-track" ${remainPct === null ? 'aria-hidden="true"' : `role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, remainPct)}"`}><span class="usage-fill" style="width:${remainPct === null ? 0 : Math.min(100, remainPct)}%"></span></div><div class="usage-reset" title="${esc(detail)}">${resetText}</div></div>`;
       }
       function usageHTML(item) {
         const entry = credentialView.usage.get(item.id);
@@ -980,25 +1014,75 @@
       });
 
       // ---- models ----
+      const modelView = { all: [], selected: new Set(), filter: '', aliases: new Map() };
+      function modelTags(m) {
+        const tags = [`<span class="badge">${shown(m.protocol, '?')}</span>`];
+        if (m.context_length) tags.push(`<span class="badge">上下文 ${number(m.context_length)}</span>`);
+        if (m.output_limit) tags.push(`<span class="badge">输出 ${number(m.output_limit)}</span>`);
+        if (m.thinking) tags.push('<span class="badge good">思考</span>');
+        return tags.join('');
+      }
+      function filteredModels() {
+        const q = modelView.filter.trim().toLocaleLowerCase();
+        if (!q) return modelView.all;
+        return modelView.all.filter((m) => `${m.upstream_id} ${m.public_id} ${m.alias || ''} ${m.display_name || ''} ${m.protocol}`.toLocaleLowerCase().includes(q));
+      }
+      // aliasValue returns the client-facing name a model is currently set to:
+      // an in-progress edit wins, then a saved alias, then the default id.
+      function aliasValue(m) {
+        if (modelView.aliases.has(m.upstream_id)) return modelView.aliases.get(m.upstream_id);
+        return m.alias || '';
+      }
+      function leftModelItem(m) {
+        const on = modelView.selected.has(m.upstream_id);
+        return `<div class="model-item ${on ? 'selected' : ''}" data-upstream="${esc(m.upstream_id)}">
+          <input type="checkbox" data-publish ${on ? 'checked' : ''} aria-label="发布 ${esc(m.upstream_id)}">
+          <div class="model-main"><div class="model-name mono" title="${esc(m.upstream_id)}">${esc(m.upstream_id)}</div><div class="model-tags">${modelTags(m)}</div></div>
+          <button class="button compact" data-test="1" type="button">测试</button>
+        </div>`;
+      }
+      function rightModelItem(m) {
+        const typed = aliasValue(m);
+        const value = typed || m.default_id || m.upstream_id;
+        return `<div class="model-item" data-upstream="${esc(m.upstream_id)}">
+          <div class="model-main">
+            <div class="model-name mono" title="上游：${esc(m.upstream_id)}">${esc(m.upstream_id)}</div>
+            <label class="model-alias-field"><span class="subtext">客户端模型名</span>
+              <input class="control mono model-alias" data-alias="1" value="${esc(value)}" placeholder="${esc(m.default_id || m.upstream_id)}" spellcheck="false" autocomplete="off" aria-label="客户端模型名">
+            </label>
+            <div class="model-tags">${modelTags(m)}</div>
+          </div>
+          <div class="model-actions">
+            <button class="button compact" data-test="1" type="button">测试</button>
+            <button class="button compact" data-remove="1" type="button">移除</button>
+          </div>
+        </div>`;
+      }
+      function renderModelLists() {
+        const leftTop = $('modelList').scrollTop, rightTop = $('modelSelected').scrollTop;
+        const list = filteredModels();
+        $('modelList').innerHTML = list.length
+          ? list.map(leftModelItem).join('')
+          : `<div class="model-empty">${modelView.all.length ? '没有匹配的模型。' : '目录为空，请先添加凭据并点击「刷新目录」。'}</div>`;
+        const chosen = modelView.all.filter((m) => modelView.selected.has(m.upstream_id));
+        $('modelSelected').innerHTML = chosen.length ? chosen.map(rightModelItem).join('') : '<div class="model-empty">尚未选择任何模型。</div>';
+        $('modelList').scrollTop = leftTop;
+        $('modelSelected').scrollTop = rightTop;
+        $('modelCount').textContent = `已选 ${chosen.length} / ${modelView.all.length}`;
+        $('modelAvailCount').textContent = modelView.filter ? `${list.length} / ${modelView.all.length}` : `${modelView.all.length}`;
+        $('modelSelectedCount').textContent = `${chosen.length}`;
+        $('selectAllModels').disabled = !list.length;
+        $('clearAllModels').disabled = !list.some((m) => modelView.selected.has(m.upstream_id));
+      }
+      function setModelSelected(upstream, on) {
+        if (on) modelView.selected.add(upstream); else modelView.selected.delete(upstream);
+        renderModelLists();
+      }
       function renderModels(data) {
-        const models = data.models || [];
-        $('modelList').innerHTML = models.length
-          ? models.map((m) => `<div class="model-row" data-upstream="${esc(m.upstream_id)}">
-              <label class="model-publish" title="控制是否发布该模型"><input type="checkbox" data-publish ${m.published !== false ? 'checked' : ''}><span>发布</span></label>
-              <div class="model-main">
-                <div class="primary-text mono">${esc(m.public_id)}</div>
-                <div class="subtext mono">${esc(m.upstream_id)}</div>
-                <div class="tagline">
-                  <span class="badge">${shown(m.protocol, '?')}</span>
-                  ${m.context_length ? `<span class="badge">上下文 ${number(m.context_length)}</span>` : ''}
-                  ${m.output_limit ? `<span class="badge">输出 ${number(m.output_limit)}</span>` : ''}
-                  ${m.thinking ? '<span class="badge good">思考</span>' : ''}
-                  <span class="badge ${m.published !== false ? 'good' : 'warn'}">${m.published !== false ? '已发布' : '未发布'}</span>
-                </div>
-              </div>
-              <div class="row-actions"><button class="button compact" data-test="1" type="button">测试</button></div>
-            </div>`).join('')
-          : '<div class="empty"><strong>目录为空</strong>请先添加凭据，然后点击「刷新目录」。</div>';
+        modelView.all = (data.models || []).slice();
+        modelView.selected = new Set(modelView.all.filter((m) => m.published !== false).map((m) => m.upstream_id));
+        modelView.aliases = new Map(modelView.all.filter((m) => m.alias).map((m) => [m.upstream_id, m.alias]));
+        renderModelLists();
         const warnings = data.warnings || [], unsupported = data.unsupported || [];
         $('modelDiagnostics').innerHTML = (warnings.length || unsupported.length)
           ? `<div style="display:grid;gap:6px">${warnings.map((w) => `<div class="mono subtext">${esc(w)}</div>`).join('')}${unsupported.map((u) => `<div class="mono subtext">× ${esc(u.upstream_id)}：${esc(u.reason)}</div>`).join('')}</div>`
@@ -1021,17 +1105,53 @@
         await loadOverview();
       }));
       $('savePublication').addEventListener('click', () => guard(async () => {
-        const disabled = [];
-        $('modelList').querySelectorAll('[data-publish]').forEach((box) => { if (!box.checked) disabled.push(box.closest('.model-row').dataset.upstream); });
-        const data = await api('/models/publication', { method: 'PUT', body: JSON.stringify({ enabled_models: [], disabled_models: disabled }) });
+        const disabled = modelView.all.filter((m) => !modelView.selected.has(m.upstream_id)).map((m) => m.upstream_id);
+        // Only persist aliases that actually differ from the default id; an
+        // empty or default-valued field means "use the default".
+        const aliases = {};
+        const collisions = new Map();
+        let dup = '';
+        for (const m of modelView.all) {
+          const typed = aliasValue(m).trim();
+          if (!typed || typed === m.default_id) continue;
+          const seen = collisions.get(typed);
+          if (seen && seen !== m.upstream_id) { dup = typed; break; }
+          collisions.set(typed, m.upstream_id);
+          aliases[m.upstream_id] = typed;
+        }
+        if (dup) { toast(`客户端模型名「${dup}」被多个模型占用，请改成唯一名字`); return; }
+        const data = await api('/models/publication', { method: 'PUT', body: JSON.stringify({ enabled_models: [], disabled_models: disabled, model_aliases: aliases }) });
         renderModels(data);
         toast('发布设置已保存');
       }));
+      $('selectAllModels').addEventListener('click', () => { for (const m of filteredModels()) modelView.selected.add(m.upstream_id); renderModelLists(); });
+      $('clearAllModels').addEventListener('click', () => { for (const m of filteredModels()) modelView.selected.delete(m.upstream_id); renderModelLists(); });
+      let modelFilterTimer = 0;
+      $('modelFilter').addEventListener('input', () => { clearTimeout(modelFilterTimer); modelFilterTimer = setTimeout(() => { modelView.filter = $('modelFilter').value; renderModelLists(); }, 200); });
       $('modelList').addEventListener('click', (event) => {
-        const button = event.target.closest('[data-test]');
-        if (!button) return;
-        const row = button.closest('.model-row');
-        openModelTest(row.dataset.upstream);
+        const row = event.target.closest('.model-item');
+        if (!row) return;
+        if (event.target.closest('[data-test]')) { openModelTest(row.dataset.upstream); return; }
+        if (event.target.matches('input[data-publish]')) return;
+        setModelSelected(row.dataset.upstream, !modelView.selected.has(row.dataset.upstream));
+      });
+      $('modelList').addEventListener('change', (event) => {
+        const box = event.target.closest('input[data-publish]');
+        if (!box) return;
+        setModelSelected(box.closest('.model-item').dataset.upstream, box.checked);
+      });
+      $('modelSelected').addEventListener('click', (event) => {
+        const row = event.target.closest('.model-item');
+        if (!row) return;
+        if (event.target.closest('[data-test]')) { openModelTest(row.dataset.upstream); return; }
+        if (event.target.closest('[data-remove]')) setModelSelected(row.dataset.upstream, false);
+      });
+      $('modelSelected').addEventListener('input', (event) => {
+        const field = event.target.closest('input[data-alias]');
+        if (!field) return;
+        const row = field.closest('.model-item');
+        if (!row) return;
+        modelView.aliases.set(row.dataset.upstream, field.value);
       });
 
       // ---- model test ----

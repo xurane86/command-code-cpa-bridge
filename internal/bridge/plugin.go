@@ -373,8 +373,12 @@ func (m *Manager) handleModels() ([]byte, error) {
 			if !settings.modelPublished(rec.UpstreamID) {
 				continue
 			}
+			id := rec.PublicID
+			if a := settings.aliasFor(rec.UpstreamID); a != "" {
+				id = a
+			}
 			models = append(models, pluginapi.ModelInfo{
-				ID:                        rec.PublicID,
+				ID:                        id,
 				Object:                    "model",
 				OwnedBy:                   ProviderID,
 				DisplayName:               rec.DisplayName,

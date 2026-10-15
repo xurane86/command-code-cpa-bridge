@@ -4,7 +4,7 @@
 
 它自带一套完整的协议转换与调度内核（多协议翻译、推理保留、目录发现、CPA 原生 Key 池调度），并附带**中文可视化控制台**：**凭据、模型、额度、日志、设置全部在网页里完成**，无需手写 YAML 就能配置和排障。
 
-> 单一 provider 命名空间：所有上游模型以 `commandcode/<上游模型 ID>` 暴露，OpenAI / Anthropic / Responses 三种客户端协议统一翻译到上游 chat-completions。
+> 单一 provider 命名空间：上游模型默认以**上游原名**（如 `deepseek/deepseek-v4.1-flash`）暴露，可在控制台逐条改成任意客户端别名（如 `deepseek-v4.1-flash`）；别名与上游原名都可调用。OpenAI / Anthropic / Responses 三种客户端协议统一翻译到上游 chat-completions。
 
 ---
 
@@ -16,8 +16,8 @@
 | --- | --- |
 | **概览** | 插件版本、已发布模型数、目录刷新时间与错误、数据目录、发布白名单/屏蔽数、一键刷新目录 |
 | **凭据** | 页面内新增 / 编辑 / 删除 CommandCode API Key，启停账号，设置优先级，展示账号邮箱与掩码密钥 |
-| **模型** | 查看已发现模型（客户端 ID、上游 ID、协议、上下文、是否支持思考），逐模型启用/禁用发布，手动刷新目录，查看目录诊断，并**对任意模型发起真实测试** |
-| **额度** | 每把 Key 的套餐、剩余 credits、5 小时 / 每周 / 月度窗口（用量、上限、重置时间），按卡片刷新 |
+| **模型** | 查看已发现模型（客户端 ID、上游 ID、协议、上下文、是否支持思考），逐模型启用/禁用发布，**逐条编辑客户端模型名（别名映射）**，手动刷新目录，查看目录诊断，并**对任意模型发起真实测试** |
+| **额度** | 每把 Key 的套餐、剩余 credits、5 小时 / 每周 / 月度窗口（**剩余量、剩余百分比**、重置时间），按卡片刷新 |
 | **日志** | 请求日志（模型、来源协议、状态、耗时、首字耗时、tokens、错误）、搜索与状态筛选、分页、清空 |
 | **统计** | 总请求、成功/失败、输入/输出/缓存 tokens、平均耗时，以及按模型聚合 |
 | **设置** | Base URL、Catalog URL、目录刷新间隔、请求超时、最大响应字节、客户端模型前缀、三种协议开关、是否允许 http，以及**思考强度映射** |
@@ -106,7 +106,7 @@
            - value: "${COMMANDCODE_API_KEY}"
    ```
 
-   其余都有默认值：客户端前缀 `commandcode/`、三种协议全开、目录刷新 15m、请求超时 5m。
+   其余都有默认值：客户端模型名默认用上游原名（可选 `model-prefix` 前缀，默认关闭）、三种协议全开、目录刷新 15m、请求超时 5m。
 
 4. 打开控制台：`/v0/resource/plugins/command-code-cpa-bridge/console`
 
@@ -123,7 +123,7 @@
 | `data-dir` | string | `plugins/command-code-cpa-bridge-data` | 页面设置与请求日志目录（也接受 `data_dir` 写法）；相对路径基于 CPA 进程工作目录 |
 | `base-url` | string | `https://api.commandcode.ai/provider/v1` | 上游地址（https；http 需 `allow-http`） |
 | `catalog-url` | string | `{base-url}/models` | 目录发现地址 |
-| `model-prefix.enabled` / `.value` | bool / string | `true` / `commandcode` | 客户端模型前缀 |
+| `model-prefix.enabled` / `.value` | bool / string | `false` / `commandcode` | 可选的客户端模型名前缀；默认关闭（客户端名即上游原名），逐条别名在「模型管理」页编辑并持久化到 `settings.json` |
 | `api-keys[].value` | string | *(空)* | 静态密钥，支持 `${ENV_VAR}`；留空则全由页面「凭据」管理 |
 | `catalog.refresh-interval` | duration | `15m` | 目录轮询间隔（最小 `1m`） |
 | `catalog.stale-while-unavailable` | bool | `true` | 刷新失败时继续提供上次快照 |
@@ -144,7 +144,7 @@
 curl http://127.0.0.1:8317/v1/chat/completions \
   -H "Authorization: Bearer <CPA_API_KEY>" \
   -H "Content-Type: application/json" \
-  -d '{"model":"commandcode/deepseek/deepseek-v4.1-flash","stream":true,"messages":[{"role":"user","content":"你好"}]}'
+  -d '{"model":"deepseek-v4.1-flash","stream":true,"messages":[{"role":"user","content":"你好"}]}'
 ```
 
 - 模型 `model` 取自「模型」页的**客户端模型 ID**。

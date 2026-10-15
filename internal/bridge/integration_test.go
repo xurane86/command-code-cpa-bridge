@@ -424,9 +424,19 @@ func integrationYAML(baseURL string) string {
 // and responses legs are exercised by pinning their fixtures with the
 // route-overrides block; extraOverrides appends further entries to that block.
 func integrationYAMLWithOverrides(baseURL, extraOverrides string) string {
-	return fmt.Sprintf("base-url: %s/v1\nallow-http: true\napi-keys:\n  - value: sk-test-1\n"+
+	// The prefix is enabled explicitly so the fixtures keep exercising the
+	// "commandcode/<id>" public ids; the shipped default is now off.
+	return fmt.Sprintf("model-prefix:\n  enabled: true\nbase-url: %s/v1\nallow-http: true\napi-keys:\n  - value: sk-test-1\n"+
 		"route-overrides:\n  gpt-5.6-luna:\n    protocol: responses\n    endpoint: /v1/responses\n"+
 		"  qwen3.7-max:\n    protocol: messages\n    endpoint: /v1/messages\n%s", baseURL, extraOverrides)
+}
+
+// integrationYAMLNoPrefix mirrors integrationYAML with the model prefix off, so
+// the bare upstream ids are advertised.
+func integrationYAMLNoPrefix(baseURL string) string {
+	return fmt.Sprintf("model-prefix:\n  enabled: false\nbase-url: %s/v1\nallow-http: true\napi-keys:\n  - value: sk-test-1\n"+
+		"route-overrides:\n  gpt-5.6-luna:\n    protocol: responses\n    endpoint: /v1/responses\n"+
+		"  qwen3.7-max:\n    protocol: messages\n    endpoint: /v1/messages\n", baseURL)
 }
 
 // newIntegrationManager registers a manager whose outbound calls flow
@@ -907,9 +917,9 @@ func TestResponsesStreamingRoundTrip(t *testing.T) {
 // ---- remaining boxes ------------------------------------
 
 func TestPrefixDisabledE2E(t *testing.T) {
-	m, _, _, yamlText := newIntegrationManager(t)
+	m, _, st, _ := newIntegrationManager(t)
 	resp := mustHandle(t, m, "plugin.reconfigure",
-		lifecycleRequestBody(yamlText+"model-prefix:\n  enabled: false\n"))
+		lifecycleRequestBody(integrationYAMLNoPrefix(st.srv.URL)))
 	if env := decodeEnv(t, resp); !env.OK {
 		t.Fatalf("reconfigure: %s", resp)
 	}
@@ -1101,7 +1111,7 @@ func TestResponsesUnsupportedFeatureDescriptive(t *testing.T) {
 // ---- upstream errors + security, end to end -------------------
 
 func integrationTwoKeyYAML(baseURL string) string {
-	return fmt.Sprintf("base-url: %s/v1\nallow-http: true\napi-keys:\n  - value: sk-test-1\n  - value: sk-test-2\n", baseURL)
+	return fmt.Sprintf("model-prefix:\n  enabled: true\nbase-url: %s/v1\nallow-http: true\napi-keys:\n  - value: sk-test-1\n  - value: sk-test-2\n", baseURL)
 }
 
 func newTwoKeyManager(t *testing.T) (*Manager, *fakeCaller, *mockCommandCode) {

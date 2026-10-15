@@ -27,7 +27,13 @@ import (
 const (
 	testKey         = "sk-test-secret-1"
 	testCatalogJSON = `{"data":[{"id":"glm-5.3"}]}`
-	testValidYAML   = "api-keys:\n  - value: " + testKey + "\n"
+	// testValidYAML enables the model prefix explicitly so tests that assert
+	// "commandcode/<id>" public ids keep exercising that feature; the shipped
+	// default is now off (bare upstream ids).
+	testValidYAML = "model-prefix:\n  enabled: true\napi-keys:\n  - value: " + testKey + "\n"
+	// testNoPrefixYAML is testValidYAML with the prefix disabled, for tests
+	// that assert bare upstream ids.
+	testNoPrefixYAML = "model-prefix:\n  enabled: false\napi-keys:\n  - value: " + testKey + "\n"
 	// testRouteOverrides pins the fixture models onto the messages and
 	// responses routes: CommandCode serves OSS models on chat/completions
 	// only, so every other upstream leg must be requested explicitly.
@@ -35,7 +41,7 @@ const (
 		"  minimax-m3:\n    protocol: messages\n    endpoint: /v1/messages\n" +
 		"  gpt-5.6-luna:\n    protocol: responses\n    endpoint: /v1/responses\n"
 	dummyKey     = "sk-test"
-	dummyKeyYAML = "api-keys:\n  - value: " + dummyKey + "\n"
+	dummyKeyYAML = "model-prefix:\n  enabled: true\napi-keys:\n  - value: " + dummyKey + "\n"
 )
 
 type capturedCall struct {
@@ -673,8 +679,7 @@ func TestReconfigureSwapsPrefixIDs(t *testing.T) {
 	if _, err := m.HandleCall("plugin.register", lifecycleRequestBody(testValidYAML)); err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	noPrefix := testValidYAML + "model-prefix:\n  enabled: false\n"
-	if _, err := m.HandleCall("plugin.reconfigure", lifecycleRequestBody(noPrefix)); err != nil {
+	if _, err := m.HandleCall("plugin.reconfigure", lifecycleRequestBody(testNoPrefixYAML)); err != nil {
 		t.Fatalf("reconfigure: %v", err)
 	}
 	var static pluginapi.ModelResponse
@@ -929,7 +934,7 @@ func TestConcurrentHandleCalls(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			body := lifecycleRequestBody(testValidYAML)
 			if i%2 == 1 {
-				body = lifecycleRequestBody(testValidYAML + "model-prefix:\n  enabled: false\n")
+				body = lifecycleRequestBody(testNoPrefixYAML)
 			}
 			if _, err := m.HandleCall("plugin.reconfigure", body); err != nil {
 				t.Errorf("reconfigure: %v", err)

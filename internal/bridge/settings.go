@@ -30,6 +30,11 @@ type pageSettings struct {
 	// upstream request is sent (e.g. medium -> high). A rule with an empty
 	// Model is the default; a rule with a matching Model wins.
 	ReasoningRules []ReasoningRule `json:"reasoning_rules,omitempty"`
+	// ModelAliases maps an upstream model ID to the client-facing name that
+	// replaces it in model listings and is accepted on inbound requests. The
+	// upstream ID keeps working alongside the alias. An empty alias means
+	// "use the id derived from the prefix setting".
+	ModelAliases map[string]string `json:"model_aliases,omitempty"`
 }
 
 // ReasoningRule maps one client-declared reasoning effort to an upstream one.
@@ -129,4 +134,28 @@ func (s pageSettings) modelPublished(upstreamID string) bool {
 		}
 	}
 	return false
+}
+
+// aliasFor returns the configured client-facing name for an upstream model ID,
+// or "" when no alias is set.
+func (s pageSettings) aliasFor(upstreamID string) string {
+	if s.ModelAliases == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.ModelAliases[upstreamID])
+}
+
+// upstreamForAlias returns the upstream model ID an incoming model name maps to
+// when that name is a configured alias, or "" when it is not an alias.
+func (s pageSettings) upstreamForAlias(model string) string {
+	model = strings.TrimSpace(model)
+	if model == "" || len(s.ModelAliases) == 0 {
+		return ""
+	}
+	for upstream, alias := range s.ModelAliases {
+		if strings.TrimSpace(alias) == model {
+			return upstream
+		}
+	}
+	return ""
 }
